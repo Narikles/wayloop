@@ -1,0 +1,61 @@
+# Lancement : cp .env.example .env (puis remplir), puis `docker compose up -d --build`.
+# Application : http://localhost:8000 · e-mails de test (Mailpit) : http://localhost:8025
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wayloop
+      POSTGRES_USER: wayloop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wayloop}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wayloop -d wayloop"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://wayloop:${POSTGRES_PASSWORD:-wayloop}@db:5432/wayloop
+      JOBS_MODE: worker
+      STORAGE_LOCAL_PATH: /app/data/files
+    volumes:
+      - files:/app/data/files
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://wayloop:${POSTGRES_PASSWORD:-wayloop}@db:5432/wayloop
+      JOBS_MODE: worker
+      STORAGE_LOCAL_PATH: /app/data/files
+    volumes:
+      - files:/app/data/files
+    command: ["python", "-m", "app.worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # Boîte aux lettres de test : tous les e-mails y arrivent tant que SMTP_HOST=mailpit.
+  # En production, remplacez par votre vrai serveur SMTP et retirez ce service.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+volumes:
+  pgdata:
+  files:
