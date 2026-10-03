@@ -22,6 +22,7 @@ from ..models import (
     ApplicationStatus,
     AuditEvent,
     Candidate,
+    CandidateNote,
     Company,
     Debrief,
     OutboundMessage,
@@ -73,6 +74,8 @@ def purge_candidate(db: Session, cand: Candidate, *, reason: str) -> None:
         app.message = None
         db.execute(delete(ScreeningEvaluation).where(ScreeningEvaluation.application_id == app.id))
         db.execute(delete(Debrief).where(Debrief.application_id == app.id))
+        db.execute(delete(CandidateNote).where(CandidateNote.application_id == app.id))
+        app.answers = None
     db.execute(delete(OutboundMessage).where(OutboundMessage.candidate_id == cand.id))
     cand.first_name = cand.last_name = cand.email = cand.phone = None
     cand.email_hash = None

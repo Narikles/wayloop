@@ -1,13 +1,18 @@
-"""Diffusion automatique des offres, sans intervention du dirigeant.
+"""Diffusion des offres : ce qui part tout seul, et ce que le dirigeant publie en un copier-coller.
 
+Automatique, sans accord préalable :
 - Google pour l'emploi : chaque page d'offre est servie avec ses données structurées
   JobPosting (schema.org), le plan du site liste les offres ouvertes, et, si un compte de
   service est configuré, l'API d'indexation de Google est prévenue à la publication comme
   à la clôture (recommandé par Google pour les offres d'emploi).
-- Plateformes partenaires (France Travail, LinkedIn, agrégateurs…) : un flux XML par
-  plateforme (/feeds/<id>.xml), au format usuel des agrégateurs. Une plateforme n'apparaît
-  qu'une fois activée (PUBLICATION_FEEDS), c'est-à-dire après l'accord passé avec elle.
-  Chaque lien porte sa source (?src=<id>) : la provenance des candidatures est suivie.
+- Plateformes partenaires par flux XML (/feeds/<id>.xml), une fois l'accord passé avec
+  chacune (PUBLICATION_FEEDS).
+
+En un copier-coller (« Poster partout facilement, mais honnêtement ») : LinkedIn, Indeed,
+France Travail et les relais locaux n'acceptent pas de publication automatique sans accord
+d'intégration. Pour chacun, WayLoop prépare un texte adapté au site, avec un lien de
+candidature suivi (?src=<id>) : chaque candidature arrive au même endroit, provenance
+indiquée. Le dirigeant coche « Publiée » ; à la clôture, il est prévenu de la retirer.
 
 Une offre close disparaît du plan du site et des flux, et ses données structurées sont
 retirées de sa page, comme Google l'exige pour les offres expirées.
@@ -55,6 +60,131 @@ def enabled_partners() -> list[dict[str, str]]:
     return [{"id": p, "label": PARTNERS.get(p, p.replace("_", " ").title())} for p in get_settings().publication_feeds]
 
 
+# Sites où le dirigeant publie lui-même le texte préparé (pages employeurs officielles).
+MANUAL: list[dict[str, str]] = [
+    {"id": "linkedin", "label": "LinkedIn", "url": "https://business.linkedin.com/fr/fr/hire/post-jobs",
+     "hint": "Publiez l'offre dans l'espace Emplois de la page de l'entreprise, ou partagez ce texte en publication."},
+    {"id": "indeed", "label": "Indeed", "url": "https://fr.indeed.com/recrutement",
+     "hint": "Créez l'annonce depuis votre compte employeur Indeed et collez la description."},
+    {"id": "france_travail", "label": "France Travail", "url": "https://www.francetravail.fr/employeur/",
+     "hint": "Déposez l'offre depuis votre espace recruteur France Travail et collez la description."},
+    {"id": "local", "label": "Relais locaux", "url": "",
+     "hint": "Groupes Facebook de la ville, mairie, école, panneau du magasin, bouche-à-oreille."},
+]
+MANUAL_IDS = {m["id"] for m in MANUAL}
+
+
+def inbound_address(rec: Recruitment) -> str | None:
+    """Adresse e-mail propre au recrutement (« offres+<code>@domaine ») si la boîte de réception est configurée."""
+    addr = get_settings().inbound_address
+    if not addr or "@" not in addr:
+        return None
+    local, domain = addr.split("@", 1)
+    return f"{local}+{rec.public_token}@{domain}"
+
+
+def _hashtag(s: str) -> str:
+    from ..text_utils import strip_accents
+
+    words = re.findall(r"[A-Za-z0-9]+", strip_accents(s))
+    return "#" + "".join(w[:1].upper() + w[1:] for w in words[:3]) if words else ""
+
+
+def platform_text(rec: Recruitment, offer: Offer, company: Company, platform: str) -> str:
+    """Texte prêt à coller, adapté au site, avec le lien de candidature suivi."""
+    p = rec.profile or {}
+    title = p.get("title") or rec.title
+    link = offer_url(rec, platform)
+    city, _ = _city_postcode(p.get("location"))
+    sal = (p.get("salary") or {}).get("text")
+    facts = " · ".join(x for x in [p.get("contract"), p.get("location"), sal] if x)
+    missions = p.get("missions") or []
+    req = [c["label"] for c in p.get("criteria", []) if c.get("required")]
+    email = inbound_address(rec)
+    if platform == "linkedin":
+        lines = [f"{company.name} recrute : {title}", ""]
+        if facts:
+            lines += [facts, ""]
+        if p.get("summary"):
+            lines += [p["summary"], ""]
+        if missions:
+            lines += ["Au programme :"] + [f"• {m}" for m in missions[:4]] + [""]
+        if req:
+            lines += ["Indispensable : " + ", ".join(req), ""]
+        lines += [f"Pour postuler (quelques minutes) : {link}", "Réponse assurée à chaque candidature.", ""]
+        short_title = re.split(r"\s/\s", re.sub(r"\(.*?\)", "", title))[0]
+        tags = [_hashtag("recrutement"), _hashtag("emploi"), _hashtag(city or ""), _hashtag(short_title)]
+        lines.append(" ".join(t for t in dict.fromkeys(tags) if t))
+        return "\n".join(lines).strip()
+    if platform == "local":
+        out = f"{company.name} recrute : {title}"
+        if facts:
+            out += f" ({facts})"
+        out += f". Pour postuler : {link}"
+        if email:
+            out += f" ou par e-mail : {email}"
+        return out + "."
+    # Indeed, France Travail : description complète, puis la façon de postuler.
+    body = offer.long_text.strip()
+    first = body.split("\n", 1)
+    if first and first[0].strip() == title:  # l'intitulé se saisit dans un champ à part sur ces sites
+        body = first[1].strip() if len(first) > 1 else ""
+    how = f"\n\nPour postuler (quelques questions sur le poste, CV en pièce jointe) : {link}"
+    if email:
+        how += f"\nVous pouvez aussi envoyer votre CV à {email}"
+    return body + how
+
+
+def diffusion(db: Session, rec: Recruitment) -> list[dict[str, Any]]:
+    """Canaux de diffusion du recrutement, avec le texte à coller pour les sites « manuels »."""
+    offer = db.execute(select(Offer).where(Offer.recruitment_id == rec.id).order_by(Offer.version.desc())).scalars().first()
+    company = db.get(Company, rec.company_id)
+    if not offer or not company:
+        return []
+    by_id = {c["id"]: c for c in offer.channels or []}
+    out: list[dict[str, Any]] = []
+    auto_ids = set()
+    for c in offer.channels or []:
+        if c.get("mode", "auto") == "auto":
+            out.append({**c, "mode": "auto"})
+            auto_ids.add(c["id"])
+    published = offer.status in {"published", "closed"} and rec.published_at is not None
+    for m in MANUAL:
+        if m["id"] in auto_ids:
+            continue
+        c = by_id.get(m["id"], {})
+        status = c.get("status") or ("todo" if published else "draft")
+        out.append({**m, "mode": "manual", "status": status, "at": c.get("at"),
+                    "outdated": bool(status == "posted" and c.get("at") and offer.created_at
+                                     and offer.created_at.isoformat() > c["at"]),
+                    "link": offer_url(rec, m["id"]),
+                    "text": platform_text(rec, offer, company, m["id"])})
+    return out
+
+
+def mark_posted(db: Session, rec: Recruitment, channel_id: str, posted: bool) -> None:
+    from ..orchestrator_errors import FlowError
+
+    if channel_id not in MANUAL_IDS:
+        raise FlowError("Site inconnu.", 404)
+    offer = db.execute(select(Offer).where(Offer.recruitment_id == rec.id).order_by(Offer.version.desc())).scalars().first()
+    if not offer or not rec.published_at:
+        raise FlowError("Publiez d'abord l'offre : son lien de candidature figure dans le texte à coller.")
+    label = next(m["label"] for m in MANUAL if m["id"] == channel_id)
+    chans = [c for c in (offer.channels or []) if c["id"] != channel_id]
+    status = "posted" if posted else "todo"
+    if offer.status == "closed":
+        status = "closed" if posted else "removed"
+    chans.append({"id": channel_id, "label": label, "mode": "manual", "status": status, "at": utcnow().isoformat()})
+    offer.channels = chans
+
+
+def manual_posted(offer: Offer | None) -> list[str]:
+    """Sites où le dirigeant a publié l'offre lui-même (à retirer à la clôture)."""
+    return [c["label"] for c in (offer.channels if offer else []) or []
+            if c.get("mode") == "manual" and c.get("status") in {"posted", "closed"}]
+
+
 def is_open(rec: Recruitment) -> bool:
     return rec.published_at is not None and rec.state in OPEN_STATES
 
@@ -63,8 +193,9 @@ def is_open(rec: Recruitment) -> bool:
 
 def publish(db: Session, rec: Recruitment, offer: Offer) -> None:
     now = utcnow().isoformat()
-    channels = [{**GOOGLE, "status": "online", "at": now}]
-    channels += [{**p, "status": "online", "at": now} for p in enabled_partners()]
+    channels = [{**GOOGLE, "mode": "auto", "status": "online", "at": now}]
+    # Une plateforme sous accord (flux XML) passe en diffusion automatique et sort de la liste « à coller ».
+    channels += [{**p, "mode": "auto", "status": "online", "at": now} for p in enabled_partners()]
     offer.channels = channels
     _schedule_google(db, rec, "URL_UPDATED")
 
@@ -76,8 +207,18 @@ def update(db: Session, rec: Recruitment) -> None:
 
 
 def withdraw(db: Session, rec: Recruitment, offer: Offer | None) -> None:
+    """Clôture : retrait automatique (Google, flux) ; les sites où le dirigeant a publié lui-même restent
+    à retirer par lui (« closed » = encore en ligne là-bas, à retirer)."""
     if offer and offer.channels:
-        offer.channels = [{**c, "status": "closed", "at": utcnow().isoformat()} for c in offer.channels]
+        out = []
+        for c in offer.channels:
+            if c.get("mode") == "manual":
+                if c.get("status") == "posted":
+                    c = {**c, "status": "closed"}
+            else:
+                c = {**c, "status": "closed", "at": utcnow().isoformat()}
+            out.append(c)
+        offer.channels = out
     if rec.published_at:
         _schedule_google(db, rec, "URL_DELETED")
 

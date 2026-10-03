@@ -1,7 +1,8 @@
-"""Paiement de l'offre Premium avec Stripe (Checkout, portail client, webhooks signés).
+"""Paiement des offres Pro et Agence avec Stripe (Checkout, portail client, webhooks signés).
 
-Appels HTTP directs à l'API Stripe (pas de SDK). En `BILLING_MODE=demo`, le passage à
-Premium est immédiat et gratuit (développement, démonstration) ; jamais en production.
+Appels HTTP directs à l'API Stripe (pas de SDK). En `BILLING_MODE=demo`, le changement
+d'offre est immédiat et gratuit (développement, démonstration) ; jamais en production.
+L'offre souscrite se déduit du prix Stripe de l'abonnement (STRIPE_PRICE_* de .env).
 """
 from __future__ import annotations
 
@@ -50,15 +51,30 @@ def _ensure_customer(db: Session, company: Company, user: User) -> str:
     return c["id"]
 
 
-def checkout_url(db: Session, company: Company, user: User, interval: str) -> str:
+def _price_id(plan: str, interval: str) -> str | None:
+    s = get_settings()
+    if plan == "agency":
+        return s.stripe_price_agency_yearly if interval == "year" else s.stripe_price_agency_monthly
+    return s.stripe_price_yearly if interval == "year" else s.stripe_price_monthly
+
+
+def plan_for_price(price_id: str | None) -> str:
+    s = get_settings()
+    return "agency" if price_id and price_id in {s.stripe_price_agency_monthly, s.stripe_price_agency_yearly} else "premium"
+
+
+def checkout_url(db: Session, company: Company, user: User, interval: str, plan: str = "premium") -> str:
     s = get_settings()
     base = s.public_base_url.rstrip("/")
+    if plan not in {"premium", "agency"}:
+        raise BillingError("Offre inconnue.")
     if s.billing_mode == "demo":
-        activate(db, company, interval=interval, status="active", period_end=None, actor_id=user.id, source="demo")
+        activate(db, company, interval=interval, status="active", period_end=None, actor_id=user.id, source="demo",
+                 plan=plan)
         return f"{base}/abonnement?statut=ok"
     if s.billing_mode != "stripe":
         raise BillingError("Le paiement n'est pas activé sur ce serveur.")
-    price = s.stripe_price_yearly if interval == "year" else s.stripe_price_monthly
+    price = _price_id(plan, interval)
     if not price:
         raise BillingError("Prix Stripe non configuré pour cette périodicité.")
     customer = _ensure_customer(db, company, user)
@@ -76,6 +92,8 @@ def checkout_url(db: Session, company: Company, user: User, interval: str) -> st
         "customer_update[name]": "auto",
         "customer_update[address]": "auto",
         "subscription_data[metadata][company_id]": company.id,
+        "subscription_data[metadata][plan]": plan,
+        "metadata[plan]": plan,
         "locale": "fr",
     }
     if s.stripe_trial_days and not company.stripe_subscription_id:
@@ -96,9 +114,10 @@ def portal_url(company: Company) -> str:
 
 
 def activate(db: Session, company: Company, *, interval: str | None, status: str, period_end: datetime | None,
-             actor_id: str | None = None, source: str = "stripe") -> None:
+             actor_id: str | None = None, source: str = "stripe", plan: str | None = None) -> None:
     previous = company.plan
-    company.plan = "premium" if status in {"active", "trialing", "past_due"} else "free"
+    paid = plan if plan in {"premium", "agency"} else (company.plan if company.plan in {"premium", "agency"} else "premium")
+    company.plan = paid if status in {"active", "trialing", "past_due"} else "free"
     company.plan_status = status
     company.plan_interval = interval or company.plan_interval
     company.plan_period_end = period_end
@@ -147,6 +166,13 @@ def _interval(sub: dict) -> str | None:
     return None
 
 
+def _plan(sub: dict) -> str:
+    items = (sub.get("items") or {}).get("data") or []
+    price_id = ((items[0].get("price") or {}).get("id")) if items else None
+    meta = (sub.get("metadata") or {}).get("plan")
+    return meta if meta in {"premium", "agency"} and not price_id else plan_for_price(price_id)
+
+
 def _company_for(db: Session, obj: dict) -> Company | None:
     cid = (obj.get("metadata") or {}).get("company_id") or obj.get("client_reference_id")
     if cid:
@@ -171,11 +197,13 @@ def handle_event(db: Session, event: dict) -> str:
     if etype == "checkout.session.completed":
         company.stripe_customer_id = obj.get("customer") or company.stripe_customer_id
         company.stripe_subscription_id = obj.get("subscription") or company.stripe_subscription_id
-        activate(db, company, interval=company.plan_interval, status="active", period_end=company.plan_period_end)
+        activate(db, company, interval=company.plan_interval, status="active", period_end=company.plan_period_end,
+                 plan=(obj.get("metadata") or {}).get("plan"))
     elif etype in {"customer.subscription.created", "customer.subscription.updated"}:
         company.stripe_subscription_id = obj.get("id")
         company.stripe_customer_id = obj.get("customer") or company.stripe_customer_id
-        activate(db, company, interval=_interval(obj), status=obj.get("status", "active"), period_end=_period_end(obj))
+        activate(db, company, interval=_interval(obj), status=obj.get("status", "active"), period_end=_period_end(obj),
+                 plan=_plan(obj))
     elif etype == "customer.subscription.deleted":
         activate(db, company, interval=None, status="canceled", period_end=_period_end(obj))
     elif etype == "invoice.payment_failed":
