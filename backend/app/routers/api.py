@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -18,7 +18,15 @@ from ..modules.interview import comparison, latest_grid, save_grid_questions
 from ..security import current_user, get_proposal, get_recruitment
 from ..services import billing, metrics, plans, referentiels
 from ..services.storage import get_storage, read_file_token, signed_file_token
-from ..views import application_view, interview_view, messages_view, recruitment_detail, recruitment_summary
+from ..views import (
+    application_view,
+    interview_view,
+    messages_view,
+    notes_view,
+    recruitment_detail,
+    recruitment_summary,
+    timeline_view,
+)
 
 router = APIRouter(prefix="/api", tags=["dirigeant"])
 
@@ -68,10 +76,42 @@ class BulkIn(BaseModel):
     action: str = Field(pattern="^(email|reject|shortlist)$")
     subject: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, max_length=8000)
+    immediate: bool = False  # refus : envoyer tout de suite plutôt qu'après le délai d'annulation
 
 
 class CheckoutIn(BaseModel):
     interval: str = Field(default="month", pattern="^(month|year)$")
+    plan: str = Field(default="premium", pattern="^(premium|agency)$")
+
+
+class BriefIn(BaseModel):
+    brief: str = Field(max_length=1200)
+
+
+class PostedIn(BaseModel):
+    posted: bool
+
+
+class MoveIn(BaseModel):
+    application_id: str
+    to: str = Field(pattern="^(recu|a_evaluer|preselectionne)$")
+
+
+class NoteIn(BaseModel):
+    text: str = Field(min_length=2, max_length=2000)
+
+
+class AutomationsIn(BaseModel):
+    auto_reject: bool | None = None
+    relance: bool | None = None
+    relance_days: int | None = Field(default=None, ge=1, le=30)
+    weekly_recap: bool | None = None
+    notify_new: bool | None = None
+
+
+class MemberIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=255)
 
 
 class SettingsIn(BaseModel):
@@ -112,6 +152,14 @@ def preview_form(body: FormIn, user: User = Depends(current_user), db: Session =
     return orch.preview_form(db, user, body.form)
 
 
+@router.post("/assistant/draft")
+def assistant_draft(body: BriefIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """Une phrase → brouillon du formulaire de poste (Claude Haiku si configuré, sinon règles). Rien n'est publié."""
+    from ..modules.assistant import draft
+
+    return draft(db, user, body.brief)
+
+
 @router.get("/recruitments/{rec_id}")
 def get_recruitment_detail(rec_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     return recruitment_detail(db, get_recruitment(db, user, rec_id))
@@ -123,6 +171,26 @@ def publish(rec_id: str, user: User = Depends(current_user), db: Session = Depen
     orch.publish_offer(db, rec, user)
     db.commit()
     return recruitment_detail(db, rec)
+
+
+@router.get("/recruitments/{rec_id}/diffusion")
+def get_diffusion(rec_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    from ..services.publication import diffusion
+
+    return diffusion(db, get_recruitment(db, user, rec_id))
+
+
+@router.put("/recruitments/{rec_id}/diffusion/{channel}")
+def put_diffusion(rec_id: str, channel: str, body: PostedIn, user: User = Depends(current_user),
+                  db: Session = Depends(get_db)) -> list[dict]:
+    from ..services.publication import diffusion, mark_posted
+
+    rec = get_recruitment(db, user, rec_id)
+    mark_posted(db, rec, channel, body.posted)
+    audit.log(db, "diffusion.marked", actor_type="user", actor_id=user.id, company_id=rec.company_id,
+              recruitment_id=rec.id, details={"channel": channel, "posted": body.posted})
+    db.commit()
+    return diffusion(db, rec)
 
 
 @router.put("/recruitments/{rec_id}/offer")
@@ -173,9 +241,44 @@ def bulk(rec_id: str, body: BulkIn, user: User = Depends(current_user), db: Sess
     from ..modules.mailing import bulk_action
 
     rec = get_recruitment(db, user, rec_id)
-    result = bulk_action(db, rec, user, body.application_ids, body.action, body.subject, body.body)
+    result = bulk_action(db, rec, user, body.application_ids, body.action, body.subject, body.body, body.immediate)
     db.commit()
     return result
+
+
+@router.post("/recruitments/{rec_id}/candidates")
+async def add_candidate(rec_id: str, first_name: str = Form(..., max_length=80), last_name: str = Form(..., max_length=80),
+                        email: str | None = Form(None, max_length=200), phone: str | None = Form(None, max_length=40),
+                        source: str = Form(..., max_length=40), message: str | None = Form(None, max_length=3000),
+                        note: str | None = Form(None, max_length=2000), send_ack: bool = Form(True),
+                        cv: UploadFile | None = File(None), user: User = Depends(current_user),
+                        db: Session = Depends(get_db)) -> dict:
+    """Candidature reçue hors formulaire (message LinkedIn, appel, CV remis en main propre…)."""
+    from ..config import get_settings
+
+    rec = get_recruitment(db, user, rec_id)
+    data = None
+    if cv is not None and cv.filename:
+        data = await cv.read()
+        if len(data) > get_settings().max_upload_mb * 1024 * 1024:
+            raise HTTPException(413, f"CV trop lourd (maximum {get_settings().max_upload_mb} Mo).")
+    app = orch.add_candidate(db, rec, user, first_name=first_name, last_name=last_name, email=email, phone=phone,
+                             source=source, message=message, note=note, cv_bytes=data or None,
+                             cv_filename=cv.filename if cv else None, cv_mime=cv.content_type if cv else None,
+                             send_ack=send_ack)
+    db.commit()
+    return application_view(app)
+
+
+@router.post("/recruitments/{rec_id}/pipeline")
+def pipeline_move(rec_id: str, body: MoveIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    rec = get_recruitment(db, user, rec_id)
+    app = _get_app(db, user, body.application_id)
+    if app.recruitment_id != rec.id:
+        raise HTTPException(404, "Candidature introuvable.")
+    msg = orch.pipeline_move(db, rec, user, app, body.to)
+    db.commit()
+    return {"message": msg, "application": application_view(app, proposed=orch.proposed_ids(db, rec))}
 
 
 @router.get("/mail-templates")
@@ -188,9 +291,9 @@ def mail_templates(user: User = Depends(current_user)) -> list[dict]:
 CSV_CRITERIA = {"met": "Remplit", "partial": "En partie", "not_met": "Non", "unknown": "Non établi"}
 CSV_GROUPS = {"meets": "Remplit les critères indispensables", "partial": "En partie", "does_not": "Ne les remplit pas",
               "unreadable": "CV à lire"}
-CSV_STAGES = {"received": "Nouvelle", "screened": "Nouvelle", "not_shortlisted": "Non retenue",
-              "shortlisted": "Sélectionnée", "invited": "Invitée", "booked": "Entretien prévu",
-              "interviewed": "Entretien fait", "hired": "Recrutée", "rejected": "Réponse envoyée", "withdrawn": "Retirée"}
+CSV_STAGES = {"received": "Reçue", "screened": "À évaluer", "not_shortlisted": "Non retenue (réponse à envoyer)",
+              "shortlisted": "Présélectionnée", "invited": "Invitée en entretien", "booked": "Entretien prévu",
+              "interviewed": "Entretien fait", "hired": "Embauchée", "rejected": "Refusée", "withdrawn": "Retirée"}
 
 
 @router.get("/recruitments/{rec_id}/export.csv")
@@ -212,12 +315,13 @@ def export_csv(rec_id: str, user: User = Depends(current_user), db: Session = De
 
     from ..services.publication import PARTNERS
 
+    labels = {**PARTNERS, **orch.SOURCES_MANUAL, "lien": "Lien direct", "google": "Google", "email": "E-mail"}
     for a in sorted(rec.applications, key=lambda a: a.created_at):
         if a.candidate.anonymized_at:
             continue
         ev = {e.criterion_id: e for e in a.evaluations}
         w.writerow([safe(a.candidate.display_name), safe(a.candidate.email), safe(a.candidate.phone),
-                    {"lien": "Lien direct", "google": "Google", **PARTNERS}.get(a.source, a.source),
+                    labels.get(a.source, a.source),
                     a.created_at.strftime("%d/%m/%Y"), CSV_GROUPS.get(a.group_suggested or "", ""),
                     CSV_STAGES.get(a.status, a.status)]
                    + [CSV_CRITERIA.get(ev[c["id"]].status, "") if c["id"] in ev else "" for c in criteria])
@@ -271,7 +375,7 @@ def billing_summary(user: User = Depends(current_user), db: Session = Depends(ge
 def billing_checkout(body: CheckoutIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     company = db.get(Company, user.company_id)
     try:
-        url = billing.checkout_url(db, company, user, body.interval)
+        url = billing.checkout_url(db, company, user, body.interval, body.plan)
     except billing.BillingError as exc:
         raise HTTPException(400, str(exc)) from None
     db.commit()
@@ -302,7 +406,8 @@ def billing_cancel_demo(user: User = Depends(current_user), db: Session = Depend
 def list_applications(rec_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
     rec = get_recruitment(db, user, rec_id)
     apps = sorted((a for a in rec.applications if a.status != "withdrawn"), key=lambda a: a.created_at)
-    return [application_view(a) for a in apps]
+    proposed = orch.proposed_ids(db, rec)
+    return [application_view(a, proposed=proposed) for a in apps]
 
 
 def _get_app(db: Session, user: User, aid: str) -> Application:
@@ -315,10 +420,56 @@ def _get_app(db: Session, user: User, aid: str) -> Application:
 @router.get("/applications/{aid}")
 def get_application(aid: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     app = _get_app(db, user, aid)
-    out = application_view(app, detail=True)
+    if app.seen_at is None:  # ouverte : passe de « Reçu » à « À évaluer »
+        app.seen_at = utcnow()
+        db.commit()
+    return _application_detail(db, app, user)
+
+
+def _application_detail(db: Session, app: Application, user: User) -> dict:
+    company = db.get(Company, user.company_id)
+    out = application_view(app, detail=True, proposed=orch.proposed_ids(db, app.recruitment))
     out["cv_link"] = f"/api/files/{signed_file_token(app.id)}" if app.cv_file_key else None
     out["messages"] = messages_view(db, app)
+    out["notes"] = notes_view(db, app)
+    since = plans.history_since(company)
+    out["timeline"] = timeline_view(db, app, since)
+    out["history_limited"] = since is not None
     return out
+
+
+@router.post("/applications/{aid}/notes")
+def post_note(aid: str, body: NoteIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    app = _get_app(db, user, aid)
+    orch.add_note(db, app, user, body.text)
+    db.commit()
+    return _application_detail(db, app, user)
+
+
+@router.delete("/applications/{aid}/notes/{nid}")
+def delete_note(aid: str, nid: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    from ..models import CandidateNote
+
+    app = _get_app(db, user, aid)
+    note = db.get(CandidateNote, nid)
+    if not note or note.application_id != app.id:
+        raise HTTPException(404, "Note introuvable.")
+    if note.author_id != user.id and user.role != "owner":
+        raise HTTPException(403, "Seul l'auteur de la note peut la supprimer.")
+    db.delete(note)
+    db.commit()
+    db.refresh(app)
+    return _application_detail(db, app, user)
+
+
+@router.post("/applications/{aid}/undo-rejection")
+def undo_rejection(aid: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    from ..services.automations import undo_rejection as undo
+
+    app = _get_app(db, user, aid)
+    undo(db, app, user)
+    db.commit()
+    return application_view(app)
 
 
 @router.get("/files/{token}")
@@ -504,7 +655,11 @@ def get_audit(rec_id: str, user: User = Depends(current_user), db: Session = Dep
     names = {a.id: a.candidate.display_name for a in rec.applications}
     names.update({a.candidate_id: a.candidate.display_name for a in rec.applications})
     names.update({iv.id: a.candidate.display_name for a in rec.applications for iv in a.interviews})
-    evs = db.execute(select(AuditEvent).where(AuditEvent.recruitment_id == rec.id).order_by(AuditEvent.id)).scalars()
+    q = select(AuditEvent).where(AuditEvent.recruitment_id == rec.id)
+    since = plans.history_since(db.get(Company, user.company_id))  # Gratuit : 30 derniers jours
+    if since is not None:
+        q = q.where(AuditEvent.at >= since)
+    evs = db.execute(q.order_by(AuditEvent.id)).scalars()
     return [{"id": e.id, "at": e.at.isoformat(), "actor_type": e.actor_type, "action": e.action,
              "label": audit.ACTION_LABELS.get(e.action, e.action), "entity": e.entity,
              "subject": names.get(e.entity_id or "") if e.entity in {"application", "candidate", "interview"} else None,
@@ -555,3 +710,78 @@ def put_settings(body: SettingsIn, user: User = Depends(current_user), db: Sessi
         user.theme = body.theme
     db.commit()
     return {"ok": True}
+
+
+# --- Automatisations ------------------------------------------------------------
+
+@router.get("/automations")
+def get_automations(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    from ..services import automations
+
+    return automations.settings_of(db.get(Company, user.company_id))
+
+
+@router.put("/automations")
+def put_automations(body: AutomationsIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    from ..services import automations
+
+    company = db.get(Company, user.company_id)
+    assert company is not None
+    out = automations.update(db, company, user, body.model_dump(exclude_none=True))
+    db.commit()
+    return out
+
+
+# --- Équipe (offre Agence) ---------------------------------------------------------
+
+def _member_view(u: User, me: User) -> dict:
+    return {"id": u.id, "name": u.name, "email": u.email, "role": u.role, "me": u.id == me.id,
+            "created_at": u.created_at.isoformat() if u.created_at else None}
+
+
+@router.get("/team")
+def get_team(user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    users = db.execute(select(User).where(User.company_id == user.company_id, User.role != "removed")
+                       .order_by(User.created_at)).scalars()
+    return [_member_view(u, user) for u in users]
+
+
+@router.post("/team")
+def invite_member(body: MemberIn, user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    from .auth import _send_link
+
+    company = db.get(Company, user.company_id)
+    plans.require(company, "team")
+    email = body.email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "Adresse e-mail invalide.")
+    if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
+        raise HTTPException(409, "Cette adresse a déjà un compte WayLoop.")
+    member = User(company_id=user.company_id, email=email, name=body.name.strip(), role="member")
+    db.add(member)
+    db.flush()
+    _send_link(db, member, invited_by=user)
+    audit.log(db, "team.invited", actor_type="user", actor_id=user.id, company_id=user.company_id, entity="user",
+              entity_id=member.id)
+    db.commit()
+    return get_team(user, db)
+
+
+@router.delete("/team/{uid}")
+def remove_member(uid: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    member = db.get(User, uid)
+    if not member or member.company_id != user.company_id or member.role == "removed":
+        raise HTTPException(404, "Membre introuvable.")
+    if user.role != "owner":
+        raise HTTPException(403, "Seul le titulaire du compte gère l'équipe.")
+    if member.role == "owner":
+        raise HTTPException(400, "Le titulaire du compte ne peut pas être retiré.")
+    # Ses recrutements reviennent au titulaire ; le compte est fermé sans effacer l'historique.
+    for rec in db.execute(select(Recruitment).where(Recruitment.owner_id == member.id)).scalars():
+        rec.owner_id = user.id
+    member.role = "removed"
+    member.email = f"retire+{member.id}@invalid.local"
+    audit.log(db, "team.removed", actor_type="user", actor_id=user.id, company_id=user.company_id, entity="user",
+              entity_id=member.id)
+    db.commit()
+    return get_team(user, db)

@@ -73,7 +73,7 @@ async def apply(token: str, request: Request, first_name: str = Form(..., max_le
         data = await cv.read()
         if len(data) > get_settings().max_upload_mb * 1024 * 1024:
             raise HTTPException(413, f"CV trop lourd (maximum {get_settings().max_upload_mb} Mo).")
-    if not data and not (message and len(message.strip()) > 30):
+    if not data and not (message and len(message.strip()) > 30) and not orch.awaiting_completion(db, rec, email):
         raise HTTPException(400, "Joignez un CV, ou présentez votre parcours dans le message.")
     import json
 
@@ -87,9 +87,15 @@ async def apply(token: str, request: Request, first_name: str = Form(..., max_le
         db, rec, first_name=first_name, last_name=last_name, email=email, phone=phone, message=message,
         source=src or "lien", pool_consent=pool_consent, cv_bytes=data,
         cv_filename=cv.filename if cv else None, cv_mime=cv.content_type if cv else None,
-        answers=parsed if rec.profile.get("criteria") else None)
+        answers=parsed if (rec.profile.get("criteria") or rec.profile.get("questions")) else None)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/pricing")
+def pricing() -> dict:
+    """Prix des offres Pro et Agence (HT), pour la page d'accueil."""
+    return plans.prices()
 
 
 @router.get("/privacy/{slug}")

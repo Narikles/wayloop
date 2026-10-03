@@ -49,10 +49,18 @@ def _slugify(name: str, db: Session) -> str:
     return slug
 
 
-def _send_link(db: Session, user: User) -> str:
+def _send_link(db: Session, user: User, invited_by: User | None = None) -> str:
     token = create_login_token(db, user)
     link = public_url(f"/connexion/{token}")
     s = get_settings()
+    if invited_by is not None:
+        company = db.get(Company, user.company_id)
+        send_email(user.email, f"{invited_by.name or invited_by.email} vous invite sur {s.app_name}",
+                   f"Bonjour,\n\n{invited_by.name or invited_by.email} vous invite à rejoindre l'espace de recrutement de "
+                   f"{company.name if company else 'son entreprise'} sur {s.app_name}.\n\nPour vous connecter, ouvrez ce lien "
+                   f"(valable {s.magic_link_ttl_minutes} minutes ; vous pourrez ensuite demander un nouveau lien à tout "
+                   f"moment avec votre adresse) :\n{link}")
+        return link
     send_email(user.email, f"Votre lien de connexion — {s.app_name}",
                f"Bonjour,\n\nPour vous connecter, ouvrez ce lien (valable {s.magic_link_ttl_minutes} minutes) :\n{link}\n\n"
                "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.")
@@ -82,7 +90,7 @@ def signup(body: SignupIn, db: Session = Depends(get_db)) -> dict:
 def request_link(body: LinkIn, db: Session = Depends(get_db)) -> dict:
     user = db.execute(select(User).where(User.email == body.email.lower())).scalar_one_or_none()
     link = None
-    if user:
+    if user and user.role != "removed":
         link = _send_link(db, user)
         db.commit()
     # Même réponse que le compte existe ou non (pas d'énumération des comptes).
@@ -116,6 +124,7 @@ def logout(response: Response) -> dict:
 
 @router.get("/me")
 def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    from ..modules.assistant import ai_enabled
     from ..services.plans import plan_of
 
     company = db.get(Company, user.company_id)
@@ -129,5 +138,6 @@ def me(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dic
                     "headcount_range": company.headcount_range} if company else None,
         "plan": {"id": plan.id, "name": plan.name, "features": sorted(plan.features),
                  "active_recruitments_limit": plan.active_recruitments},
-        "app": {"name": s.app_name, "demo_mode": s.demo_mode, "environment": s.environment},
+        "app": {"name": s.app_name, "demo_mode": s.demo_mode, "environment": s.environment,
+                "ai_assistant": ai_enabled(), "inbound_email": bool(s.inbound_address)},
     }
