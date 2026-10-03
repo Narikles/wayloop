@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
-import { CalendarCheck, CheckCircle2, ListChecks, MailCheck } from "lucide-react";
+import { BellRing, Columns3, Inbox, MailCheck, Send, Sparkles } from "lucide-react";
 import type { CompanyRef } from "../api/types";
-import { useApi, useSession } from "../lib/ctx";
+import { useApi, useLoad, useSession } from "../lib/ctx";
+import { fmtEuro } from "../lib/format";
 import { Combobox } from "../ui/Combobox";
 import { Button, Field, Logo, Notice, Tabs } from "../ui/kit";
 
@@ -16,6 +17,7 @@ export default function Login() {
   const [name, setName] = useState("");
   const [sent, setSent] = useState<{ demo_link?: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [prices] = useLoad(() => api.pricing(), []);
   if (me) return <Navigate to="/" replace />;
 
   const submit = async () => {
@@ -77,14 +79,18 @@ export default function Login() {
       <div className="auth-side">
         <div className="row" style={{ color: "#fff", gap: 10, fontWeight: 600 }}><Logo size={28} /> WayLoop</div>
         <div className="stack lg">
-          <h2>Recrutez sans service RH&nbsp;: de l'offre à la réponse au dernier candidat.</h2>
+          <h2>Recruter sans le chaos{"\u00a0"}: un processus clair, de l'offre au dernier candidat.</h2>
           {[
-            [<ListChecks size={18} key="a" />, "Décrivez le poste dans un formulaire : l'offre est rédigée et publiée sur Google pour l'emploi."],
-            [<CheckCircle2 size={18} key="b" />, "Chaque candidat répond à vos critères : vous voyez d'un coup d'œil qui les remplit."],
-            [<CalendarCheck size={18} key="c" />, "Entretiens, notes, décision et réponse à chaque candidat, au même endroit."],
+            [<Sparkles size={18} key="a" />, "Décrivez le poste en une phrase : l'offre, les critères et trois questions de présélection sont rédigés en cinq minutes."],
+            [<Send size={18} key="b" />, "Publiez partout, honnêtement : Google pour l'emploi automatiquement, LinkedIn, Indeed et France Travail en un copier-coller."],
+            [<Inbox size={18} key="c" />, "Toutes les candidatures au même endroit, provenance indiquée : formulaire, e-mail, message LinkedIn, appel."],
+            [<Columns3 size={18} key="d" />, "Un pipeline simple : reçu, à évaluer, présélectionné, entretien, refusé ou embauché. Plus aucun candidat oublié."],
+            [<BellRing size={18} key="e" />, "Remerciements et relances automatiques, récapitulatif chaque lundi."],
           ].map(([ic, t], i) => <div className="pt" key={i}>{ic}<span>{t}</span></div>)}
         </div>
-        <span className="small" style={{ color: "rgb(255 255 255 / 70%)" }}>Gratuit pour un recrutement à la fois · Premium dès 39 € HT/mois</span>
+        <span className="small" style={{ color: "rgb(255 255 255 / 70%)" }}>
+          Gratuit pour un recrutement à la fois{prices ? ` · Pro ${fmtEuro(prices.premium.monthly)} HT/mois · Agence ${fmtEuro(prices.agency.monthly)} HT/mois` : ""}
+        </span>
       </div>
     </div>
   );

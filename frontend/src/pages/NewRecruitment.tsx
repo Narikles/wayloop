@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Award, BookOpen, Car, Clock, GraduationCap, Languages, Plus, Send, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, Award, BookOpen, Car, Clock, GraduationCap, Languages, MessageSquareText, Plus, RotateCcw, Send, Sparkles, Trash2, Wrench } from "lucide-react";
 import { ApiError } from "../api/client";
-import type { AddressRef, FormPreview, Issue, JobForm, JobRef, KnowledgeRef, RefLists } from "../api/types";
+import type { AddressRef, Draft, FormPreview, Issue, JobForm, JobRef, KnowledgeRef, RefLists } from "../api/types";
 import { IS_DEMO, useApi, useDebounced, useLoad, useSession, useToast, useUpgrade } from "../lib/ctx";
 import { Combobox } from "../ui/Combobox";
 import { Button, Card, Field, IssueLine, Notice, OfferText, PageHeader, Segmented, removeMention } from "../ui/kit";
@@ -21,9 +21,18 @@ export const DEMO_FORM: JobForm = {
   location: "Villeurbanne (69100)", location_citycode: "69266", start_date: "Dès que possible", remote: "non",
   company_pitch: "Négoce Durand distribue des matériaux de construction aux artisans de la région lyonnaise depuis 1987. Nous sommes 18 personnes.",
   benefits: ["Tickets restaurant", "Mutuelle prise en charge à 60 %"],
+  questions: [],
 };
 
-const EMPTY: JobForm = { title: "", missions: [""], criteria: [], contract: "CDI", salary_period: "mois", remote: "non", benefits: [] };
+const EMPTY: JobForm = { title: "", missions: [""], criteria: [], contract: "CDI", salary_period: "mois", remote: "non", benefits: [], questions: [], summary: "" };
+
+const EXAMPLES = [
+  "Dev Python junior, 3 ans, Lyon, 2500-3000 €",
+  "Serveur en CDD 6 mois à Annecy, 1 900 € brut, week-ends",
+  "Assistant commercial ADV, 2 ans, Excel, Villeurbanne, 2 100 à 2 400 € par mois",
+  "Électricien bâtiment confirmé, CDI, Nantes, 32-36 k€, habilitation électrique",
+];
+const MAX_QUESTIONS = 3;
 
 const KINDS: { kind: string; label: string; icon: React.ReactNode; params: Record<string, any> }[] = [
   { kind: "experience", label: "Expérience", icon: <Clock size={16} />, params: { years: 2, domain: "" } },
@@ -38,14 +47,59 @@ const KINDS: { kind: string; label: string; icon: React.ReactNode; params: Recor
 const STEPS = ["Le poste", "Les critères", "Les conditions", "Aperçu"];
 const stepOfField = (field: string | null) => {
   if (!field) return 3;
-  if (field === "title" || field.startsWith("missions")) return 0;
-  if (field.startsWith("criteria")) return 1;
+  if (field === "title" || field === "summary" || field.startsWith("missions")) return 0;
+  if (field.startsWith("criteria") || field.startsWith("questions")) return 1;
   return 2;
 };
 
 function clean(f: JobForm): JobForm {
-  return { ...f, missions: f.missions.filter((m) => m.trim()), salary_min: f.salary_min === "" ? undefined : f.salary_min,
-    salary_max: f.salary_max === "" ? undefined : f.salary_max };
+  return { ...f, missions: f.missions.filter((m) => m.trim()), questions: (f.questions || []).filter((q) => q.trim()),
+    salary_min: f.salary_min === "" ? undefined : f.salary_min, salary_max: f.salary_max === "" ? undefined : f.salary_max };
+}
+
+/** Une phrase → brouillon complet du formulaire (assistant IA, ou règles si l'IA n'est pas configurée). */
+function AssistantCard({ draft, onDraft, onReset }: { draft: Draft | null; onDraft: (d: Draft) => void; onReset: () => void }) {
+  const api = useApi();
+  const { me } = useSession();
+  const notify = useToast();
+  const [brief, setBrief] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ai = !!me?.app.ai_assistant;
+  const go = async (text = brief) => {
+    if (text.trim().length < 4) return;
+    setBusy(true);
+    try {
+      onDraft(await api.draft(text.trim()));
+    } catch (e) {
+      notify((e as Error).message, "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (draft) {
+    return (
+      <Notice tone="brand" icon={<Sparkles size={16} />}
+        title={draft.engine === "ia" ? "Brouillon rédigé par l'assistant IA : relisez chaque étape avant de publier." : "Brouillon préparé à partir de votre phrase : relisez chaque étape avant de publier."}
+        actions={<button className="btn sm" onClick={onReset}><RotateCcw size={14} /> Repartir d'une autre phrase</button>}>
+        {draft.notes.length > 0 && <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{draft.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+      </Notice>
+    );
+  }
+  return (
+    <Card className="highlight" title={<><span className="eyebrow">Gagnez une heure</span><h2>Décrivez le poste en une phrase</h2></>}
+      sub={ai ? "L'assistant IA rédige l'offre, propose les critères clés et trois questions de présélection. Vous relisez tout avant de publier."
+        : "Le brouillon se prépare à partir de votre phrase : offre, critères clés, trois questions de présélection. Vous relisez tout avant de publier."}>
+      <form className="row" style={{ flexWrap: "nowrap" }} onSubmit={(e) => { e.preventDefault(); void go(); }}>
+        <input className="input" aria-label="Le poste en une phrase" placeholder="Ex. Dev Python junior, 3 ans, Lyon, 2500-3000 €" value={brief}
+          onChange={(e) => setBrief(e.target.value)} maxLength={1200} />
+        <button className="btn primary" type="submit" disabled={busy || brief.trim().length < 4}>{busy ? <span className="spinner" /> : <Sparkles size={16} />} Préparer</button>
+      </form>
+      <div className="chips">
+        {EXAMPLES.map((x) => <button key={x} type="button" className="chip" disabled={busy} onClick={() => { setBrief(x); void go(x); }}>{x}</button>)}
+      </div>
+      <span className="xs muted">N'indiquez ni nom de personne ni critère personnel (âge, situation de famille…).{ai ? " Seule cette phrase est envoyée à notre fournisseur d'IA, jamais une donnée de candidat." : ""} Vous pouvez aussi remplir le formulaire vous-même, ci-dessous.</span>
+    </Card>
+  );
 }
 
 export default function NewRecruitment() {
@@ -63,6 +117,7 @@ export default function NewRecruitment() {
   const [preview, setPreview] = useState<FormPreview | null>(null);
   const [serverIssues, setServerIssues] = useState<Issue[] | null>(null);
   const [busy, setBusy] = useState<"publish" | "draft" | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const debounced = useDebounced(f, 400);
   const set = <K extends keyof JobForm>(k: K, v: JobForm[K]) => { setServerIssues(null); setF((x) => ({ ...x, [k]: v })); };
 
@@ -91,7 +146,7 @@ export default function NewRecruitment() {
 
   const submit = async (publish: boolean) => {
     setTried([true, true, true, true]);
-    if (atLimit) return upgrade("Avec l'offre Gratuit, un recrutement à la fois. Clôturez celui en cours ou passez à Premium.");
+    if (atLimit) return upgrade("Avec l'offre Gratuit, un recrutement à la fois. Clôturez celui en cours ou passez à l'offre Pro.");
     setBusy(publish ? "publish" : "draft");
     try {
       const r = await api.createRecruitment(clean(f), publish);
@@ -109,16 +164,26 @@ export default function NewRecruitment() {
     }
   };
 
+  const applyDraft = (d: Draft) => {
+    setDraft(d);
+    setF({ ...EMPTY, ...d.form, missions: d.form.missions.length ? d.form.missions : [""], questions: d.form.questions || [],
+      benefits: d.form.benefits || [], summary: d.form.summary || "" });
+    setServerIssues(d.issues.length ? d.issues : null);
+    setTried([false, false, false, false]);
+    setStep(0);
+  };
+
   return (
     <main className="content">
       <PageHeader crumbs={<><Link to="/recrutements">Recrutements</Link> / Nouveau</>} title="Nouveau recrutement" />
       {atLimit && (
         <Notice tone="warn" title="Un recrutement est déjà en cours"
-          actions={<><Link className="btn sm" to="/recrutements">Voir le recrutement en cours</Link><Button size="sm" variant="primary" onClick={() => upgrade()}>Passer à Premium</Button></>}>
+          actions={<><Link className="btn sm" to="/recrutements">Voir le recrutement en cours</Link><Button size="sm" variant="primary" onClick={() => upgrade()}>Passer à Pro</Button></>}>
           L'offre Gratuit permet un recrutement à la fois. Vous pouvez préparer celui-ci dès maintenant.
         </Notice>
       )}
       <div className="wizard stack lg">
+        <AssistantCard draft={draft} onDraft={applyDraft} onReset={() => { setDraft(null); setF(EMPTY); setServerIssues(null); setStep(0); }} />
         <ol className="wizard-steps" aria-label="Étapes">
           {STEPS.map((s, i) => (
             <li key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}
@@ -138,6 +203,11 @@ export default function NewRecruitment() {
                 search={async (q) => (await api.refJobs(q)).results}
                 render={(j) => <><b>{j.label}</b><span className="xs muted">{j.domain}</span></>}
                 footer="Référentiel des métiers ROME — France Travail" />
+            </Field>
+            <Field label="Le poste en quelques lignes" htmlFor="summary" hint="Facultatif : le contexte du poste, ce qui le rend intéressant."
+              error={at("summary").map((i, k) => <IssueLine key={k} issue={i} onRemove={() => set("summary", removeMention(f.summary || "", i.match!))} />)}>
+              <textarea id="summary" className={`textarea ${at("summary").length ? "has-issue" : ""}`} rows={3} value={f.summary || ""}
+                onChange={(e) => set("summary", e.target.value)} placeholder="Ex. Vous rejoignez une équipe de quatre personnes qui développe notre outil de facturation." />
             </Field>
             <div className="stack sm">
               <span className="lbl strong small">Missions</span>
@@ -178,6 +248,9 @@ export default function NewRecruitment() {
                 ))}
               </div>
             </div>
+            <hr className="sep" />
+            <QuestionsEditor questions={f.questions || []} issues={issues.filter((i) => i.field?.startsWith("questions."))}
+              onChange={(q) => set("questions", q)} />
           </Card>
         )}
 
@@ -270,8 +343,33 @@ function PreviewStep({ preview, issues, goTo }: { preview: FormPreview | null; i
           {preview.questions.map((q) => <li key={q.id}><span className="strong">{q.label}</span><br /><span className="xs muted">{q.input === "yesno" ? "Oui / Non" : q.input === "number" ? "Nombre d'années" : q.input === "select" ? q.options!.map((o) => o.label).join(" · ") : "Réponse libre"}</span></li>)}
         </ol>
       ) : <p className="muted">Aucun critère : les candidats envoient seulement leur CV.</p>}
-      <span className="xs muted">À la publication, l'offre est mise en ligne avec son lien de candidature et diffusée sur Google pour l'emploi.</span>
+      <span className="xs muted">À la publication, l'offre est mise en ligne avec son lien de candidature et diffusée sur Google pour l'emploi ; les textes pour LinkedIn, Indeed et France Travail sont prêts à copier dans la page Offre.</span>
     </Card>
+  );
+}
+
+/** Questions de présélection à réponse libre : techniques, liées au métier, jamais notées. */
+function QuestionsEditor({ questions, issues, onChange }: { questions: string[]; issues: Issue[]; onChange: (q: string[]) => void }) {
+  return (
+    <div className="stack sm">
+      <div className="row between">
+        <span className="lbl strong small row" style={{ gap: 8 }}><MessageSquareText size={16} /> Questions de présélection</span>
+        <span className="xs muted">{questions.length}/{MAX_QUESTIONS}</span>
+      </div>
+      <span className="small muted">Posées au candidat quand il postule (réponse libre, quelques lignes). Vous lisez les réponses telles quelles : elles ne sont jamais notées.</span>
+      {questions.map((q, i) => (
+        <div className="stack sm" key={i}>
+          <div className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+            <textarea className={`textarea q-text ${issues.some((x) => x.field === `questions.${i}`) ? "has-issue" : ""}`} aria-label={`Question ${i + 1}`} value={q} rows={2}
+              placeholder="Ex. Comment organisez-vous vos tests avant de livrer une fonctionnalité ?"
+              onChange={(e) => onChange(questions.map((x, j) => (j === i ? e.target.value : x)))} />
+            <button className="btn ghost icon" aria-label="Retirer la question" onClick={() => onChange(questions.filter((_, j) => j !== i))}><Trash2 size={16} /></button>
+          </div>
+          {issues.filter((x) => x.field === `questions.${i}`).map((iss, k) => <IssueLine key={k} issue={{ ...iss, match: null }} />)}
+        </div>
+      ))}
+      {questions.length < MAX_QUESTIONS && <button className="btn sm" style={{ alignSelf: "flex-start" }} onClick={() => onChange([...questions, ""])}><Plus size={14} /> Ajouter une question</button>}
+    </div>
   );
 }
 

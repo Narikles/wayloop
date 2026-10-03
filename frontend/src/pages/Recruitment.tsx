@@ -107,8 +107,8 @@ function HeaderActions({ rec, onChange }: { rec: RecruitmentDetail; onChange: (r
     ...(rec.apply_link && !closed ? [{ label: "Copier le lien de l'offre", onClick: async () => {
       try { await navigator.clipboard.writeText(rec.apply_link!); notify("Lien copié"); } catch { notify("Copie impossible.", "bad"); }
     } }] : []),
-    ...(rec.applications > 0 ? [{ label: "Exporter les candidatures", hint: hasExport ? "Fichier CSV" : "Premium", onClick: async () => {
-      if (!hasExport) return upgrade("L'export des candidatures est inclus dans Premium.");
+    ...(rec.applications > 0 ? [{ label: "Exporter les candidatures", hint: hasExport ? "Fichier CSV (Excel, Google Sheets)" : "Offre Pro", onClick: async () => {
+      if (!hasExport) return upgrade("L'export des candidatures est inclus dans l'offre Pro.");
       const filename = `candidatures-${rec.id.slice(0, 8)}.csv`;
       const csv = api.exportCsv?.(rec.id);
       if (csv) {
