@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Mail, Search, UserPlus, UserX } from "lucide-react";
-import type { ApplicationItem, Criterion, MailTemplate, RecruitmentDetail } from "../../api/types";
-import { IS_DEMO, useAction, useApi, useHas, useLoad } from "../../lib/ctx";
-import { fmtDate, fmtShort, GROUPS, shortLabel, SOURCE_LABELS, STAGE } from "../../lib/format";
+import { AlertTriangle, Mail, Search, Trash2, UserPlus, UserX } from "lucide-react";
+import type { ApplicationDetail, ApplicationItem, Criterion, MailTemplate, RecruitmentDetail } from "../../api/types";
+import { IS_DEMO, useAction, useApi, useHas, useLoad, useSession } from "../../lib/ctx";
+import { fmtDate, fmtShort, fmtTime, GROUPS, shortLabel, SOURCE_LABELS, STAGE } from "../../lib/format";
 import { Badge, Button, Card, CriteriaTable, Drawer, ErrorBox, Field, Modal, Notice, Segmented, Spinner, StatusIcon } from "../../ui/kit";
 
 export function GroupBadge({ g }: { g: string | null }) {
@@ -44,7 +44,7 @@ export function CandidatesTable({ apps, criteria, selected, onSelect, onOpen, sh
                 {onSelect && <td className="w-check" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" className="cb" aria-label={`Sélectionner ${a.name}`} checked={!!selected?.includes(a.id)} onChange={(e) => toggle(a.id, e.target.checked)} />
                 </td>}
-                <td><div className="cell-title"><b>{a.name}</b><span className="xs muted">{SOURCE_LABELS[a.source] || a.source} · {fmtDate(a.created_at)}{a.rescued ? " · repêché(e)" : ""}</span></div></td>
+                <td><div className="cell-title"><b>{a.name}{a.seen === false && <> <Badge tone="brand">Nouveau</Badge></>}</b><span className="xs muted">{SOURCE_LABELS[a.source] || a.source} · {fmtDate(a.created_at)}{a.rescued ? " · repêché(e)" : ""}</span></div></td>
                 {screened && cols.map((c) => (
                   <td key={c.id} className={`crit hide-sm ${c.required ? "" : "opt"}`}>
                     {ev[c.id] ? <span title={`${c.label} : ${ev[c.id].declared ? `déclaré ${ev[c.id].declared}` : ev[c.id].justification}`}><StatusIcon status={ev[c.id].status} size={20} /></span> : <span className="subtle">—</span>}
@@ -92,7 +92,7 @@ export function useFilteredApps(apps: ApplicationItem[] | null) {
 
 export type BulkMode = "email" | "reject" | "invite";
 
-export function BulkModal({ rec, ids, mode, onClose, onDone }: { rec: RecruitmentDetail; ids: string[]; mode: BulkMode; onClose: () => void; onDone: () => void }) {
+export function BulkModal({ rec, ids, mode, onClose, onDone, autoReject }: { rec: RecruitmentDetail; ids: string[]; mode: BulkMode; onClose: () => void; onDone: () => void; autoReject?: boolean }) {
   const api = useApi();
   const run = useAction();
   const [tpls] = useLoad<MailTemplate[]>(() => api.mailTemplates(), []);
@@ -109,18 +109,24 @@ export function BulkModal({ rec, ids, mode, onClose, onDone }: { rec: Recruitmen
   const n = ids.length;
   const title = mode === "email" ? `Écrire à ${n} candidat${n > 1 ? "s" : ""}` : mode === "invite" ? `Inviter en entretien — ${n} candidat${n > 1 ? "s" : ""}`
     : `Ne pas retenir ${n} candidature${n > 1 ? "s" : ""}`;
-  const sub = mode === "reject" ? "Chaque personne reçoit une réponse courtoise, sans motif personnel. Elle ne recevra pas d'autre message à la fin."
+  const sub = mode === "reject" ? (autoReject
+    ? "Chaque personne reçoit un remerciement courtois, sans motif personnel, envoyé automatiquement dans l'heure : vous pouvez l'annuler d'ici là."
+    : "Chaque personne reçoit une réponse courtoise, sans motif personnel. Elle ne recevra pas d'autre message à la fin.")
     : mode === "invite" ? "Demandez leurs disponibilités ; vous fixerez ensuite la date dans la page Entretiens."
       : "Chaque candidat reçoit un message personnel ; les réponses arrivent dans votre boîte mail.";
   return (
     <Modal size="lg" onClose={onClose} title={title} sub={sub}
       foot={<><button className="btn" onClick={onClose}>Annuler</button>
+        {mode === "reject" && autoReject && <Button variant="ghost" onClick={async () => {
+          const r = await run(() => api.bulk(rec.id, { application_ids: ids, action: "reject", subject: subject || undefined, body: body || undefined, immediate: true }), "Réponses envoyées");
+          if (r) onDone();
+        }}>Envoyer tout de suite</Button>}
         <Button variant={mode === "reject" ? "danger solid" : "primary"} onClick={async () => {
           const action = mode === "invite" ? "shortlist" : mode;
           const r = await run(() => api.bulk(rec.id, { application_ids: ids, action, subject: subject || undefined, body: body || undefined }),
-            mode === "email" ? "Messages envoyés" : mode === "invite" ? "Invitation envoyée" : "Réponses envoyées");
+            mode === "email" ? "Messages envoyés" : mode === "invite" ? "Invitation envoyée" : autoReject ? "Remerciements programmés : annulables pendant une heure" : "Réponses envoyées");
           if (r) onDone();
-        }}>{mode === "reject" ? "Envoyer les réponses" : `Envoyer ${n > 1 ? `les ${n} messages` : "le message"}`}</Button></>}>
+        }}>{mode === "reject" ? (autoReject ? "Programmer l'envoi" : "Envoyer les réponses") : `Envoyer ${n > 1 ? `les ${n} messages` : "le message"}`}</Button></>}>
       {mode === "email" && (
         <Field label="Modèle">
           <select className="select" value={tpl} onChange={(e) => setTpl(e.target.value)}>
@@ -136,7 +142,7 @@ export function BulkModal({ rec, ids, mode, onClose, onDone }: { rec: Recruitmen
   );
 }
 
-/** Ajoute des candidats aux entretiens : lien de réservation (Premium) ou invitation relue (Gratuit). */
+/** Ajoute des candidats aux entretiens : lien de réservation (Pro) ou invitation relue (Gratuit). */
 export function useInvite(rec: RecruitmentDetail, onDone: () => Promise<void> | void) {
   const api = useApi();
   const run = useAction();
@@ -154,29 +160,47 @@ export function useInvite(rec: RecruitmentDetail, onDone: () => Promise<void> | 
   return { canInvite, invite, node };
 }
 
-export function CandidateDrawer({ id, rec, onClose, onChanged }: { id: string; rec: RecruitmentDetail; onClose: () => void; onChanged?: () => void }) {
+export function CandidateDrawer({ id, rec, onClose, onChanged, onReject }: {
+  id: string; rec: RecruitmentDetail; onClose: () => void; onChanged?: () => void; onReject?: (id: string) => void;
+}) {
   const api = useApi();
-  const [a, err] = useLoad(() => api.getApplication(id), [id]);
+  const run = useAction();
+  const [a, err, , setA] = useLoad(() => api.getApplication(id), [id]);
   const [modal, setModal] = useState<"email" | "reject" | null>(null);
   const done = () => { onChanged?.(); onClose(); };
   const { canInvite, invite, node } = useInvite(rec, done);
   const final = a && ["rejected", "hired", "withdrawn"].includes(a.status);
+  const free = (a?.answers || []).filter((x) => (rec.profile.questions || []).some((q) => q.text === x.question));
   return (
     <Drawer onClose={onClose}
       title={a ? a.name : "Candidat"}
-      sub={a && <div className="row" style={{ gap: 6 }}><GroupBadge g={a.group} /><Badge tone={STAGE[a.status]?.tone}>{STAGE[a.status]?.label}</Badge><span className="xs muted">{SOURCE_LABELS[a.source] || a.source} · {fmtShort(a.created_at)}</span></div>}
+      sub={a && <div className="row" style={{ gap: 6 }}><GroupBadge g={a.group} /><Badge tone={STAGE[a.status]?.tone}>{STAGE[a.status]?.label}</Badge><span className="xs muted">{SOURCE_LABELS[a.source] || a.source} · {fmtShort(a.created_at)}{a.manual ? " · ajoutée à la main" : ""}</span></div>}
       actions={a && !final && <>
         {canInvite && !a.shortlisted && <button className="btn sm" onClick={() => invite([a.id])}><UserPlus size={14} /> Inviter</button>}
         <button className="btn sm" onClick={() => setModal("email")}><Mail size={14} /> Écrire</button>
-        <button className="btn sm" onClick={() => setModal("reject")}><UserX size={14} /> Ne pas retenir</button>
+        <button className="btn sm" onClick={() => (onReject ? (onReject(a.id), onClose()) : setModal("reject"))}><UserX size={14} /> Ne pas retenir</button>
       </>}>
       <ErrorBox msg={err} />
       {!a && !err && <Spinner />}
       {a && (
         <>
+          {a.rejection_due_at && !a.rejection_sent_at && (
+            <Notice tone="warn" title={`Remerciement programmé à ${fmtTime(a.rejection_due_at)}`}
+              actions={<Button size="sm" onClick={async () => { const r = await run(() => api.undoRejection(a.id), "Refus annulé : aucun message n'est parti"); if (r) done(); }}>Annuler le refus</Button>}>
+              Jusque-là, rien n'est parti : vous pouvez encore changer d'avis.
+            </Notice>
+          )}
+          {a.no_email && <Notice tone="warn" title="Pas d'adresse e-mail">Informez cette personne de l'utilisation de ses données (RGPD) lors de votre prochain échange, ou ajoutez son adresse en l'invitant à postuler par le lien de l'offre.</Notice>}
+          {a.awaiting_answers && !a.no_email && <Notice title="Questions du poste pas encore remplies">Le lien lui a été envoyé avec l'accusé de réception ; avec l'offre Pro, une relance part automatiquement au bout de quelques jours.</Notice>}
           <Card title="Critère par critère">
-            {a.evaluations.length ? <CriteriaTable evals={a.evaluations} /> : <p className="muted">La synthèse sera prête avec la sélection.</p>}
+            {a.evaluations.length ? <CriteriaTable evals={a.evaluations} /> : <p className="muted">La synthèse s'affichera dès que la candidature sera lue.</p>}
           </Card>
+          {free.length > 0 && (
+            <Card title="Questions de présélection" sub="Réponses du candidat, telles quelles (jamais notées).">
+              <dl className="qa">{free.map((x) => <div key={x.question}><dt>{x.question}</dt><dd className="pre">{x.answer}</dd></div>)}</dl>
+            </Card>
+          )}
+          <NotesCard a={a} onChange={setA} />
           <Card title="Coordonnées">
             <dl className="dl">
               <dt>E-mail</dt><dd>{a.email || "—"}</dd>
@@ -203,11 +227,62 @@ export function CandidateDrawer({ id, rec, onClose, onChanged }: { id: string; r
               </ul>
             </Card>
           )}
+          {!!a.timeline?.length && (
+            <Card title="Historique" sub={a.history_limited ? "30 derniers jours (offre Gratuit) ; historique complet avec l'offre Pro." : "Tout ce qui s'est passé pour cette candidature."}>
+              <ol className="timeline">
+                {a.timeline.map((t, i) => (
+                  <li key={i} className={t.kind}>
+                    <span className="tl-dot" aria-hidden />
+                    <span className="grow small">{t.label}{t.status && t.status !== "sent" ? " (échec d'envoi)" : ""}</span>
+                    <span className="xs muted tnum">{fmtShort(t.at)}</span>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
           {modal && <BulkModal rec={rec} ids={[a.id]} mode={modal} onClose={() => setModal(null)} onDone={() => { setModal(null); done(); }} />}
           {node}
         </>
       )}
     </Drawer>
+  );
+}
+
+/** Notes libres de l'équipe sur la candidature (jamais visibles par le candidat). */
+function NotesCard({ a, onChange }: { a: ApplicationDetail; onChange: (a: ApplicationDetail) => void }) {
+  const api = useApi();
+  const run = useAction();
+  const { me } = useSession();
+  const [text, setText] = useState("");
+  const notes = a.notes || [];
+  return (
+    <Card title="Notes" sub="Visibles par vous et votre équipe, jamais par le candidat.">
+      {notes.length > 0 && (
+        <ul className="notes">
+          {notes.map((n) => (
+            <li key={n.id}>
+              <div className="row between" style={{ gap: 6 }}>
+                <span className="xs muted">{n.author} · {fmtShort(n.created_at)}</span>
+                {(n.author_id === me?.id || me?.role === "owner") && (
+                  <button className="btn ghost sm icon" aria-label="Supprimer la note" onClick={async () => {
+                    const r = await run(() => api.deleteNote(a.id, n.id));
+                    if (r) onChange(r);
+                  }}><Trash2 size={14} /></button>
+                )}
+              </div>
+              <p className="pre small">{n.text}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="stack sm">
+        <textarea className="textarea" rows={2} placeholder="Ex. Appelé le 3/10 : disponible dans un mois, très motivé." value={text} onChange={(e) => setText(e.target.value)} />
+        <Button size="sm" className="self-start" disabled={text.trim().length < 2} onClick={async () => {
+          const r = await run(() => api.addNote(a.id, text.trim()), "Note ajoutée");
+          if (r) { onChange(r); setText(""); }
+        }}>Ajouter la note</Button>
+      </div>
+    </Card>
   );
 }
 
