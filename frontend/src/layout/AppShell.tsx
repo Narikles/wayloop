@@ -2,24 +2,31 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Briefcase, CalendarDays, Check, Home, LogOut, Menu, Plus, Settings, Sparkles } from "lucide-react";
 import { IS_DEMO, useApi, useLoad, useSession } from "../lib/ctx";
-import { initials, isClosed } from "../lib/format";
+import { fmtEuro, initials, isClosed } from "../lib/format";
 import { Logo, Modal } from "../ui/kit";
 
-export const PREMIUM_POINTS = [
+export const PRO_POINTS = [
   "Plusieurs recrutements en même temps",
-  "Les candidats choisissent eux-mêmes leur créneau d'entretien en ligne",
-  "Export des candidatures",
+  "Remerciement automatique des refusés, relance des non-répondants, récapitulatif chaque lundi",
+  "Historique complet de chaque candidat",
+  "Créneaux d'entretien en ligne et export des candidatures",
 ];
 
 export function UpgradeModal({ reason, onClose }: { reason: string | null; onClose: () => void }) {
   const nav = useNavigate();
+  const api = useApi();
+  const [p] = useLoad(() => api.pricing(), []);
+  const team = !!reason && /Agence/.test(reason);
   return (
-    <Modal title="WayLoop Premium" sub={reason || undefined} onClose={onClose}
+    <Modal title={team ? "WayLoop Agence" : "WayLoop Pro"} sub={reason || undefined} onClose={onClose}
       foot={<><button className="btn" onClick={onClose}>Plus tard</button>
-        <button className="btn primary" onClick={() => { onClose(); nav("/parametres/abonnement"); }}><Sparkles size={16} /> Voir l'offre</button></>}>
+        <button className="btn primary" onClick={() => { onClose(); nav("/parametres/abonnement"); }}><Sparkles size={16} /> Voir les offres</button></>}>
       <div className="stack">
-        {PREMIUM_POINTS.map((f) => <div className="feat" key={f}><Check size={16} color="var(--ok)" /> {f}</div>)}
-        <p className="muted small">49 € HT par mois sans engagement, ou 39 € HT par mois en annuel.</p>
+        {(team ? ["Tout ce que comprend Pro", "Plusieurs utilisateurs dans le même espace", "Support prioritaire"] : PRO_POINTS)
+          .map((f) => <div className="feat" key={f}><Check size={16} color="var(--ok)" /> {f}</div>)}
+        {p && <p className="muted small">{team
+          ? `${fmtEuro(p.agency.monthly)} HT par mois sans engagement, ou ${fmtEuro(p.agency.yearly_per_month)} HT par mois en annuel.`
+          : `${fmtEuro(p.premium.monthly)} HT par mois sans engagement, ou ${fmtEuro(p.premium.yearly_per_month)} HT par mois en annuel.`}</p>}
       </div>
     </Modal>
   );
@@ -37,7 +44,7 @@ function PlanCard() {
     <div className="plan-card">
       <div className="row between"><span className="strong small">Offre Gratuit</span><span className="xs muted tnum">{used}/{limit} en cours</span></div>
       <div className="meter"><span style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} /></div>
-      <Link to="/parametres/abonnement" className="btn sm"><Sparkles size={14} /> Passer à Premium</Link>
+      <Link to="/parametres/abonnement" className="btn sm"><Sparkles size={14} /> Passer à Pro</Link>
     </div>
   );
 }
@@ -48,9 +55,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const [open, setOpen] = useState(false);
   const [recs] = useLoad(() => (me ? api.listRecruitments() : Promise.resolve([])), [loc.pathname, me?.id, version]);
-  useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [loc.pathname]);
   if (!me) return <Navigate to="/connexion" replace />;
-  const todo = (recs || []).filter((r) => r.pending && !isClosed(r.state)).length;
+  const todo = (recs || []).filter((r) => (r.pending || r.new_applications) && !isClosed(r.state)).length;
   const item = (to: string, icon: ReactNode, label: string, count?: number, end?: boolean) => (
     <NavLink to={to} end={end} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>
       {icon}<span>{label}</span>{count ? <span className="count tnum" aria-label={`${count} à faire`}>{count}</span> : null}
