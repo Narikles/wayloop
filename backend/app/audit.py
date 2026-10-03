@@ -156,4 +156,13 @@ ACTION_LABELS: dict[str, str] = {
     "followup.answered": "Suivi du maintien en poste",
     "billing.plan_changed": "Changement d'offre",
     "export.csv": "Export des candidatures",
+    "offer.drafted": "Brouillon d'offre préparé par l'assistant",
+    "application.added": "Candidature ajoutée à la main",
+    "application.completed": "Questions du poste remplies par le candidat",
+    "application.rejection_cancelled": "Refus annulé avant l'envoi",
+    "note.added": "Note ajoutée",
+    "diffusion.marked": "Diffusion mise à jour",
+    "automations.updated": "Automatisations modifiées",
+    "team.invited": "Membre invité dans l'équipe",
+    "team.removed": "Membre retiré de l'équipe",
 }

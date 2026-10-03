@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -25,7 +26,16 @@ def create_app() -> FastAPI:
     s = get_settings()
     if s.environment == "prod" and (s.secret_key.startswith("change-me") or len(s.secret_key) < 32):
         raise RuntimeError("SECRET_KEY doit être défini (32 caractères minimum) en production.")
-    app = FastAPI(title=f"{s.app_name} — recrutement pour TPE et PME", version="0.3.0",
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):  # noqa: ANN202
+        # Hébergement en un seul processus : refus programmés, relances, récapitulatifs, e-mails reçus.
+        from . import scheduler
+
+        scheduler.start()
+        yield
+        scheduler.stop()
+
+    app = FastAPI(title=f"{s.app_name} — recrutement pour TPE et PME", version="0.4.0", lifespan=lifespan,
                   docs_url="/api/docs" if s.environment != "prod" else None, openapi_url="/api/openapi.json")
 
     if s.database_url.startswith("sqlite"):

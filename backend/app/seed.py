@@ -38,14 +38,15 @@ FORM = {
 }
 
 # (prénom, nom, e-mail, CV, provenance, réponses aux questions c1 expérience, c2 Excel, c3 permis B)
+# Provenances variées : chaque lien publié (Google, LinkedIn, Indeed, France Travail, lien direct) est suivi.
 CANDIDATES = [
     ("Camille", "Martin", "camille.martin@example.org", "cv_camille.txt", "google", {"c1": 5, "c2": 3, "c3": True}),
-    ("Karim", "Benali", "karim.benali@example.org", "cv_karim.txt", "google", {"c1": 8, "c2": 2, "c3": True}),
+    ("Karim", "Benali", "karim.benali@example.org", "cv_karim.txt", "linkedin", {"c1": 8, "c2": 2, "c3": True}),
     ("Julie", "Moreau", "julie.moreau@example.org", "cv_julie.txt", "lien", {"c1": 1, "c2": 1, "c3": False}),
-    ("Thomas", "Petit", "thomas.petit@example.org", "cv_thomas.txt", "google", {"c1": 0, "c2": 1, "c3": True}),
-    ("Inès", "Lefèvre", "ines.lefevre@example.org", "cv_ines.txt", "lien", {"c1": 4, "c2": 3, "c3": True}),
-    ("Lucas", "Garnier", "lucas.garnier@example.org", "cv_lucas.txt", "google", {"c1": 0, "c2": 3, "c3": False}),
-    ("Sarah", "Nguyen", "sarah.nguyen@example.org", "cv_sarah.txt", "lien", {"c1": 3, "c2": 2, "c3": False}),
+    ("Thomas", "Petit", "thomas.petit@example.org", "cv_thomas.txt", "indeed", {"c1": 0, "c2": 1, "c3": True}),
+    ("Inès", "Lefèvre", "ines.lefevre@example.org", "cv_ines.txt", "google", {"c1": 4, "c2": 3, "c3": True}),
+    ("Lucas", "Garnier", "lucas.garnier@example.org", "cv_lucas.txt", "france_travail", {"c1": 0, "c2": 3, "c3": False}),
+    ("Sarah", "Nguyen", "sarah.nguyen@example.org", "cv_sarah.txt", "linkedin", {"c1": 3, "c2": 2, "c3": False}),
 ]
 
 

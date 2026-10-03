@@ -1,9 +1,11 @@
-"""Tâches de fond : synthèse des candidatures, signalement à Google, rappels, relances,
-suivi à 3 et 6 mois, purge.
+"""Tâches de fond : synthèse des candidatures, signalement à Google, refus programmés,
+rappels, relances, récapitulatif hebdomadaire, e-mails de candidature reçus, suivi à 3 et
+6 mois, purge.
 
 Lancement : `python -m app.worker` (service `worker` du docker-compose).
-En mode JOBS_MODE=inline, les tâches immédiates s'exécutent dans la requête et
-seules les tâches périodiques ont besoin du worker.
+En mode JOBS_MODE=inline, les tâches immédiates s'exécutent dans la requête ; les tâches
+différées et périodiques sont relevées par le planificateur intégré (app/scheduler.py) quand
+aucun worker séparé ne tourne (hébergement en un seul processus).
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .db import SessionLocal, utcnow
-from .models import Application, Company, Interview, Job, Proposal, Recruitment, RecruitmentState as S
+from .models import Application, Company, Interview, Job, Proposal, Recruitment, RecruitmentState as S  # noqa: F401
 
 log = logging.getLogger("wayloop.worker")
 
@@ -47,6 +49,12 @@ def run_job(db: Session, job: Job) -> None:
             rec = db.get(Recruitment, job.payload["recruitment_id"])
             if rec:
                 publication.run_google_job(db, rec, job.payload.get("type", "URL_UPDATED"))
+        elif job.kind == "send_rejection":
+            from .services.automations import send_rejection
+
+            app = db.get(Application, job.payload["application_id"])
+            if app:
+                send_rejection(db, app, job.payload["subject"], job.payload["body"], job.payload.get("user_id"))
         job.status = "done"
         job.finished_at = utcnow()
     except Exception as exc:  # noqa: BLE001
@@ -64,7 +72,7 @@ def run_job(db: Session, job: Job) -> None:
 
 
 def send_reminders(db: Session) -> int:
-    """Rappel la veille de chaque entretien fixé ; relance unique d'une invitation à choisir un créneau."""
+    """Rappel la veille de chaque entretien fixé."""
     from . import orchestrator as orch
     from .modules import communication as comms
     from .services.messaging import email_candidate
@@ -78,7 +86,7 @@ def send_reminders(db: Session) -> int:
     for iv in db.execute(q).scalars():
         app = iv.application
         rec = app.recruitment
-        if S(rec.state) in {S.CLOSED, S.ABANDONED}:
+        if S(rec.state) in {S.CLOSED, S.ABANDONED} or app.status == "rejected":
             continue
         company = db.get(Company, rec.company_id)
         assert iv.start is not None and company is not None
@@ -88,23 +96,8 @@ def send_reminders(db: Session) -> int:
                         recruitment_id=rec.id)
         iv.reminder_sent_at = now
         n += 1
-    # Prise de rendez-vous en ligne : relance des invitations restées sans réponse depuis 3 jours (une fois).
-    # Sans créneaux en ligne, la date se convient par e-mail avec le dirigeant : pas de relance automatique.
-    q2 = select(Interview).where(Interview.status == "invited", Interview.invite_reminder_sent_at.is_(None),
-                                 Interview.invited_at <= now - timedelta(days=3))
-    for iv in db.execute(q2).scalars():
-        app = iv.application
-        rec = app.recruitment
-        if S(rec.state) != S.INTERVIEWING or not orch.free_slots(db, rec):
-            continue
-        company = db.get(Company, rec.company_id)
-        assert company is not None
-        subject, body = comms.invitation(company, rec, app.candidate.first_name,
-                                         orch.public_url(f"/rdv/{orch.booking_token(iv)}"))
-        email_candidate(db, app.candidate, kind="invitation_reminder", subject="Rappel — " + subject, body=body,
-                        company_id=rec.company_id, recruitment_id=rec.id)
-        iv.invite_reminder_sent_at = now
-        n += 1
+    # Les relances (invitation restée sans date, questions non remplies) relèvent des automatisations :
+    # services/automations.run_relances.
     return n
 
 
@@ -132,10 +125,14 @@ def auto_propose_screening(db: Session) -> int:
 
 
 def periodic(db: Session) -> dict[str, int]:
+    from .services import automations, inbound
     from .services.purge import purge_old_audit, run_due_purges
 
     return {
         "reminders": send_reminders(db),
+        "relances": automations.run_relances(db),
+        "recaps": automations.send_weekly_recaps(db),
+        "inbound": inbound.fetch(db),
         "screening_proposals": auto_propose_screening(db),
         "purged": run_due_purges(db),
         "audit_purged": purge_old_audit(db),
@@ -153,25 +150,32 @@ def process_due_jobs(db: Session, limit: int = 10) -> int:
     return len(jobs)
 
 
+def tick(last_periodic: float, period: float = 300) -> float:
+    """Un passage : tâches dues, puis tâches périodiques si la période est écoulée. Renvoie l'heure du dernier passage
+    périodique (partagé par le worker et le planificateur intégré)."""
+    db = SessionLocal()
+    try:
+        process_due_jobs(db)
+        if time.time() - last_periodic > period:
+            stats = periodic(db)
+            db.commit()
+            last_periodic = time.time()
+            if any(stats.values()):
+                log.info("Tâches périodiques : %s", stats)
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("Erreur dans la boucle des tâches de fond")
+    finally:
+        db.close()
+    return last_periodic
+
+
 def main() -> None:  # pragma: no cover - boucle de production
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     log.info("Worker démarré")
     last_periodic = 0.0
     while True:
-        db = SessionLocal()
-        try:
-            process_due_jobs(db)
-            if time.time() - last_periodic > 300:
-                stats = periodic(db)
-                db.commit()
-                last_periodic = time.time()
-                if any(stats.values()):
-                    log.info("Tâches périodiques : %s", stats)
-        except Exception:  # noqa: BLE001
-            db.rollback()
-            log.exception("Erreur dans la boucle du worker")
-        finally:
-            db.close()
+        last_periodic = tick(last_periodic)
         time.sleep(5)
 
 

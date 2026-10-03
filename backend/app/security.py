@@ -53,7 +53,7 @@ def exchange_token(db: Session, token: str) -> tuple[User, LoginToken]:
             raise HTTPException(401, "Ce lien a déjà servi. Demandez-en un nouveau.")
         lt.used_at = utcnow()
     user = db.get(User, lt.user_id)
-    if not user:
+    if not user or user.role == "removed":
         raise HTTPException(401, "Compte introuvable.")
     return user, lt
 
@@ -67,7 +67,7 @@ def current_user(request: Request, db: Session = Depends(get_db),
     except (BadSignature, SignatureExpired):
         raise HTTPException(401, "Session expirée.") from None
     user = db.get(User, data.get("u"))
-    if not user:
+    if not user or user.role == "removed":
         raise HTTPException(401, "Connexion requise.")
     return user
 

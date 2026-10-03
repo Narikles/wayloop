@@ -44,18 +44,52 @@ class Settings(BaseSettings):
     email_from: str = "WayLoop <no-reply@wayloop.local>"
 
     # --- Abonnement et paiement --------------------------------------------
-    # demo : bouton « Passer à Premium » sans paiement (dev, démo) · stripe : paiement réel ·
+    # Trois offres : Gratuit, Pro (identifiant interne « premium ») et Agence (« agency »).
+    # demo : changement d'offre sans paiement (dev, démo) · stripe : paiement réel ·
     # disabled : offre gratuite seulement.
     billing_mode: Literal["demo", "stripe", "disabled"] = "demo"
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
-    stripe_price_monthly: str | None = None  # identifiant de prix Stripe (price_…)
+    stripe_price_monthly: str | None = None  # Pro, identifiant de prix Stripe (price_…)
     stripe_price_yearly: str | None = None
+    stripe_price_agency_monthly: str | None = None  # Agence
+    stripe_price_agency_yearly: str | None = None
     stripe_trial_days: int = 14
     stripe_automatic_tax: bool = False  # nécessite Stripe Tax configuré
     # Prix affichés (HT). À aligner sur les prix configurés dans Stripe.
-    price_monthly_eur: float = 49.0
-    price_yearly_eur: float = 468.0
+    price_monthly_eur: float = 25.0
+    price_yearly_eur: float = 240.0
+    price_agency_monthly_eur: float = 79.0
+    price_agency_yearly_eur: float = 756.0
+
+    # --- Assistant de rédaction (IA) ----------------------------------------
+    # Avec une clé Anthropic, l'assistant rédige le brouillon de l'offre (fiche de poste, critères,
+    # questions de présélection) à partir d'une phrase. Sans clé, le brouillon est préparé par règles.
+    # Seule la description saisie par le dirigeant est envoyée ; jamais une donnée de candidat.
+    anthropic_api_key: str | None = None
+    ai_model: str = "claude-haiku-4-5"
+    ai_api_url: str = "https://api.anthropic.com/v1/messages"
+    ai_timeout_seconds: float = 30.0
+    ai_daily_limit: int = 30  # brouillons par entreprise et par jour
+    ai_usd_per_mtok_in: float = 1.0  # prix publics de Claude Haiku 4.5 (octobre 2026), pour le suivi des coûts
+    ai_usd_per_mtok_out: float = 5.0
+    usd_to_eur: float = 0.86
+
+    # --- Réception des candidatures par e-mail (facultatif) -------------------
+    # Boîte dédiée relevée en IMAP : chaque recrutement a son adresse « offres+<code>@domaine ».
+    # Les CV joints (PDF, DOCX, TXT) deviennent des candidatures, provenance « e-mail ».
+    inbound_address: str | None = None  # ex. offres@recrutement.votre-domaine.fr
+    imap_host: str | None = None
+    imap_port: int = 993
+    imap_user: str | None = None
+    imap_password: str | None = None
+    imap_folder: str = "INBOX"
+
+    # --- Automatisations (offres Pro et Agence) --------------------------------
+    auto_reject_delay_minutes: int = 60  # délai pendant lequel un refus peut être annulé avant l'envoi
+    relance_days_default: int = 3
+    weekly_recap_weekday: int = 0  # 0 = lundi
+    weekly_recap_hour: int = 8  # heure de Paris
 
     # --- Référentiels publics ----------------------------------------------
     geocoding_url: str = "https://data.geopf.fr/geocodage"
@@ -87,6 +121,11 @@ class Settings(BaseSettings):
     # inline : les tâches (synthèse, diffusion) s'exécutent dans la requête.
     # worker : elles sont mises en file et traitées par `python -m app.worker`.
     jobs_mode: Literal["inline", "worker"] = "inline"
+    # En mode inline (un seul processus, ex. hébergeur gratuit), un fil d'exécution relève les
+    # tâches différées et périodiques (refus programmés, relances, récapitulatif, e-mails reçus).
+    # Désactivé d'office en tests et quand un worker séparé tourne (JOBS_MODE=worker).
+    embedded_scheduler: bool = True
+    scheduler_interval_seconds: int = 60
     demo_mode: bool = False  # affiche le lien magique à l'écran (jamais en prod)
     magic_link_ttl_minutes: int = 30
     session_days: int = 30

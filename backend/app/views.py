@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import utcnow
+from .services.publication import inbound_address
 from .models import (
     Application,
     Interview,
@@ -19,7 +20,18 @@ from .models import (
     RecruitmentState as S,
 )
 from .modules.interview import latest_grid
-from .orchestrator import KIND_PAGE, PAGES, apply_link, current_offer, free_slots, interviews_of, main_pending, step_of
+from .orchestrator import (
+    KIND_PAGE,
+    PAGES,
+    apply_link,
+    current_offer,
+    free_slots,
+    interviews_of,
+    main_pending,
+    proposed_ids,
+    stage_of,
+    step_of,
+)
 
 STEP_LABELS = ["Offre", "Candidatures", "Entretiens", "Débrief", "Décision"]
 
@@ -36,6 +48,7 @@ STATE_LABELS = {
 
 MESSAGE_KINDS = {
     "acknowledgment": "Accusé de réception",
+    "relance:questions": "Relance : questions du poste à remplir",
     "invitation": "Invitation à un entretien",
     "invitation_reminder": "Relance de l'invitation",
     "booking_confirmation": "Entretien confirmé",
@@ -81,18 +94,26 @@ def recruitment_summary(db: Session, r: Recruitment) -> dict[str, Any]:
         "id": r.id, "title": r.title, "state": r.state, "state_label": state_label(r, step),
         "step": step, "page": PAGES[step - 1], "created_at": iso(r.created_at), "published_at": iso(r.published_at),
         "closed_at": iso(r.closed_at), "applications": len(apps), "outcome": r.outcome,
+        "new_applications": sum(1 for a in apps if a.seen_at is None
+                                and a.status in {"received", "screened"} and r.state not in {"closed", "abandoned"}),
         "pending": ({"id": pending.id, "kind": pending.kind, "title": pending.title,
                      "page": KIND_PAGE.get(pending.kind)} if pending else None),
     }
 
 
-def application_view(a: Application, *, detail: bool = False) -> dict[str, Any]:
+def application_view(a: Application, *, detail: bool = False, proposed: set[str] | None = None) -> dict[str, Any]:
+    from .services.automations import needs_answers
+
     c = a.candidate
     out: dict[str, Any] = {
         "id": a.id, "name": c.display_name, "source": a.source, "status": a.status,
+        "stage": stage_of(a, proposed), "seen": a.seen_at is not None, "manual": a.added_by is not None,
         "group": a.group_suggested, "shortlisted": a.shortlisted, "rescued": a.rescued,
         "created_at": iso(a.created_at), "screened": a.screened_at is not None, "has_cv": bool(a.cv_file_key),
         "pool_consent": c.pool_consent, "anonymized": bool(c.anonymized_at),
+        "rejection_due_at": iso(a.rejection_due_at), "rejection_sent_at": iso(a.rejection_sent_at),
+        "awaiting_answers": needs_answers(a.recruitment, a), "no_email": not c.email and not c.anonymized_at,
+        "notes_count": len(a.notes),
         "evaluations": [
             {"criterion_id": e.criterion_id, "label": e.criterion_label, "required": e.required, "status": e.status,
              "justification": e.justification, "excerpts": e.excerpts or [], "declared": e.declared,
@@ -115,6 +136,65 @@ def application_view(a: Application, *, detail: bool = False) -> dict[str, Any]:
             "debrief": ({"notes": a.debrief.notes, "overall": a.debrief.overall, "status": a.debrief.status}
                         if a.debrief else None),
         })
+    return out
+
+
+def notes_view(db: Session, a: Application) -> list[dict[str, Any]]:
+    from .models import User
+
+    names = {u.id: (u.name or u.email) for u in db.execute(select(User).where(
+        User.company_id == a.recruitment.company_id)).scalars()}
+    return [{"id": n.id, "text": n.text, "author": names.get(n.author_id or "", "—"), "author_id": n.author_id,
+             "created_at": iso(n.created_at)} for n in a.notes]
+
+
+TIMELINE_LABELS = {
+    "application.received": "Candidature reçue", "application.added": "Ajoutée à la main",
+    "application.completed": "Questions du poste remplies par le candidat", "screening.grouped": "Synthèse établie",
+    "shortlist.candidate_added": "Ajoutée à la sélection", "shortlist.candidate_removed": "Retirée de la sélection",
+    "interview.invited": "Invitée en entretien", "interview.booked": "Date d'entretien confirmée",
+    "interview.cancelled": "Date d'entretien retirée", "interview.attendance": "Présence à l'entretien notée",
+    "debrief.validated": "Notes d'entretien enregistrées", "application.rejected": "Classée « Refusé »",
+    "application.rejection_cancelled": "Refus annulé", "note.added": "Note ajoutée",
+    "application.withdrawn": "Candidature retirée par le candidat",
+}
+
+
+def source_label(src: str) -> str:
+    from .orchestrator import SOURCES_MANUAL
+    from .services.publication import PARTNERS
+
+    return {**PARTNERS, **SOURCES_MANUAL, "lien": "lien direct", "google": "Google", "email": "e-mail"}.get(src, src)
+
+
+def timeline_view(db: Session, a: Application, since=None) -> list[dict[str, Any]]:  # noqa: ANN001
+    """Historique complet d'une candidature : étapes, e-mails envoyés, notes (le plus récent d'abord)."""
+    from .models import AuditEvent
+
+    ids = {a.id, a.candidate_id, *[i.id for i in a.interviews]}
+    q = select(AuditEvent).where(AuditEvent.recruitment_id == a.recruitment_id, AuditEvent.entity_id.in_(ids))
+    if since is not None:
+        q = q.where(AuditEvent.at >= since)
+    out = []
+    for e in db.execute(q.order_by(AuditEvent.id)).scalars():
+        if e.action == "message.sent":
+            continue  # les e-mails viennent de la liste des messages, avec leur objet
+        label = TIMELINE_LABELS.get(e.action)
+        if not label:
+            continue
+        if e.action == "application.rejected" and (e.details or {}).get("scheduled"):
+            label = "Classée « Refusé » (remerciement programmé)"
+        if e.action in {"application.received", "application.added"} and (e.details or {}).get("source"):
+            label += f" ({source_label(str((e.details or {})['source']))})"
+        out.append({"at": iso(e.at), "kind": "event", "label": label,
+                    "by": "candidate" if e.actor_type == "candidate" else e.actor_type})
+    for m in db.execute(select(OutboundMessage).where(OutboundMessage.candidate_id == a.candidate_id,
+                                                      OutboundMessage.recruitment_id == a.recruitment_id)).scalars():
+        if since is not None and m.created_at < since:
+            continue
+        out.append({"at": iso(m.created_at), "kind": "email", "label": f"E-mail : {MESSAGE_KINDS.get(m.kind, 'Message')}",
+                    "by": "system", "status": m.status})
+    out.sort(key=lambda x: x["at"] or "", reverse=True)
     return out
 
 
@@ -176,7 +256,19 @@ def recruitment_detail(db: Session, r: Recruitment) -> dict[str, Any]:
         "interview_minutes": r.interview_minutes,
         "free_slots": len(free_slots(db, r)),  # créneaux en ligne encore libres (Premium)
         "sources": _sources(apps),
+        "stages": _stages(apps, proposed_ids(db, r)),
+        "inbound_address": inbound_address(r) if r.published_at else None,
+        "assisted": (r.profile or {}).get("assisted"),
     }
+
+
+def _stages(apps: list[Application], proposed: set[str]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for a in apps:
+        st = stage_of(a, proposed)
+        if st:
+            out[st] = out.get(st, 0) + 1
+    return out
 
 
 def _sources(apps: list[Application]) -> dict[str, int]:

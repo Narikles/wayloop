@@ -2,8 +2,11 @@
 
 À chaque étape, le système prépare ce qu'il peut (offre, sélection, invitations, réponses)
 et attend un geste du dirigeant. Les étapes correspondent aux pages de l'application :
-Offre, Candidatures, Entretiens, Débrief, Décision. Aucun modèle d'IA : formulaire,
-référentiels publics, règles explicites. Le dirigeant est prévenu par e-mail.
+Offre, Candidatures, Entretiens, Débrief, Décision. Toutes les candidatures (formulaire,
+e-mail, ajout à la main) arrivent au même endroit, provenance indiquée, et avancent dans le
+pipeline Reçu → À évaluer → Présélectionné → Entretien → Refusé / Embauché.
+L'évaluation des candidatures reste faite par règles explicites, jamais par un modèle d'IA ;
+l'assistant IA ne sert qu'à rédiger le brouillon de l'offre (modules/assistant.py).
 """
 from __future__ import annotations
 
@@ -217,12 +220,15 @@ def create_recruitment(db: Session, user: User, form: dict[str, Any], *, publish
                       title=profile["title"], interview_location=company.address)
     db.add(rec)
     db.flush()
+    assisted = (profile.get("assisted") or {}).get("engine")
     audit.log(db, "recruitment.created", actor_type="user", actor_id=user.id, company_id=rec.company_id,
               recruitment_id=rec.id, entity="recruitment", entity_id=rec.id,
-              details={"criteria": len(profile["criteria"]), "rome_code": profile.get("rome_code")})
+              details={"criteria": len(profile["criteria"]), "questions": len(profile.get("questions") or []),
+                       "rome_code": profile.get("rome_code"), "assisted": assisted},
+              model=(profile.get("assisted") or {}).get("model"))
     rec.profile_validated_at = utcnow()
     o = offer_from_profile(profile, company.name)
-    offer = _save_offer(db, rec, o["short"], o["long"], created_by="system")
+    offer = _save_offer(db, rec, o["short"], o["long"], created_by="assistant" if assisted == "ia" else "system")
     interview.generate_grid(db, rec)
     if publish:
         publish_offer(db, rec, user)
@@ -315,9 +321,6 @@ def receive_application(db: Session, rec: Recruitment, *, first_name: str, last_
                         phone: str | None, message: str | None, source: str, pool_consent: bool,
                         cv_bytes: bytes | None, cv_filename: str | None, cv_mime: str | None,
                         answers: dict[str, Any] | None = None) -> tuple[Application, str]:
-    from .services.cv_text import extract_text, guess_suffix
-    from .services.storage import get_storage
-
     if not publication.is_open(rec):
         raise FlowError("Cette offre n'est plus ouverte aux candidatures.", 410)
     email_n = email.strip().lower()
@@ -336,6 +339,11 @@ def receive_application(db: Session, rec: Recruitment, *, first_name: str, last_
     existing = db.execute(select(Application).where(Application.recruitment_id == rec.id,
                                                     Application.candidate_id == cand.id)).scalar_one_or_none()
     if existing and existing.status != ApplicationStatus.WITHDRAWN.value:
+        from .services.automations import needs_answers
+
+        if needs_answers(rec, existing) and answers is not None:
+            return complete_application(db, rec, existing, message=message, answers=answers, cv_bytes=cv_bytes,
+                                        cv_filename=cv_filename, cv_mime=cv_mime), candidate_token(cand)
         raise FlowError("Vous avez déjà postulé à cette offre avec cette adresse e-mail.", 409)
     app = existing or Application(recruitment_id=rec.id, candidate_id=cand.id)
     app.source = re.sub(r"[^a-z_]", "", (source or "lien").lower())[:40] or "lien"
@@ -346,13 +354,7 @@ def receive_application(db: Session, rec: Recruitment, *, first_name: str, last_
         app.answers = clean_answers(rec.profile, answers)
     app.status = ApplicationStatus.RECEIVED.value
     if cv_bytes:
-        suffix = guess_suffix(cv_filename or "", cv_mime)
-        if not suffix:
-            raise FlowError("Format de CV non pris en charge : envoyez un PDF, un DOCX ou un TXT.")
-        app.cv_file_key = get_storage().put(cv_bytes, suffix)
-        app.cv_filename = (cv_filename or f"cv{suffix}")[:200]
-        app.cv_mime = cv_mime
-        app.cv_text = extract_text(cv_bytes, suffix)
+        _store_cv(app, cv_bytes, cv_filename, cv_mime)
     elif app.message:
         app.cv_text = app.message  # sans CV, le message de présentation en tient lieu
     if existing is None:
@@ -374,6 +376,226 @@ def receive_application(db: Session, rec: Recruitment, *, first_name: str, last_
     return app, token
 
 
+def _store_cv(app: Application, cv_bytes: bytes, cv_filename: str | None, cv_mime: str | None) -> None:
+    from .services.cv_text import extract_text, guess_suffix
+    from .services.storage import get_storage
+
+    suffix = guess_suffix(cv_filename or "", cv_mime)
+    if not suffix:
+        raise FlowError("Format de CV non pris en charge : envoyez un PDF, un DOCX ou un TXT.")
+    app.cv_file_key = get_storage().put(cv_bytes, suffix)
+    app.cv_filename = (cv_filename or f"cv{suffix}")[:200]
+    app.cv_mime = cv_mime
+    app.cv_text = extract_text(cv_bytes, suffix)
+
+
+def awaiting_completion(db: Session, rec: Recruitment, email: str) -> bool:
+    """Le candidat (reçu par e-mail ou ajouté à la main) revient répondre aux questions : CV déjà reçu."""
+    from .services.automations import needs_answers
+
+    email_h = hash_token("email:" + rec.company_id + ":" + email.strip().lower())
+    app = db.execute(select(Application).join(Candidate).where(
+        Application.recruitment_id == rec.id, Candidate.email_hash == email_h)).scalar_one_or_none()
+    return bool(app and app.status != ApplicationStatus.WITHDRAWN.value and needs_answers(rec, app)
+                and (app.cv_file_key or app.message))
+
+
+def complete_application(db: Session, rec: Recruitment, app: Application, *, message: str | None,
+                         answers: dict[str, Any], cv_bytes: bytes | None, cv_filename: str | None,
+                         cv_mime: str | None) -> Application:
+    """Le candidat reçu par e-mail (ou ajouté à la main) répond aux questions du poste depuis le lien reçu."""
+    from .modules.form import clean_answers
+
+    app.answers = clean_answers(rec.profile, answers)
+    if cv_bytes:
+        _store_cv(app, cv_bytes, cv_filename, cv_mime)
+    extra = (message or "").strip()
+    if extra:
+        app.message = ((app.message + "\n\n") if app.message else "") + extra[:3000]
+    app.candidate.last_contact_at = utcnow()
+    app.screened_at = None  # synthèse refaite avec les réponses
+    audit.log(db, "application.completed", actor_type="candidate", actor_id=app.candidate_id,
+              company_id=rec.company_id, recruitment_id=rec.id, entity="application", entity_id=app.id,
+              details={"has_cv": bool(cv_bytes)})
+    db.flush()
+    if app.status in {ApplicationStatus.RECEIVED.value, ApplicationStatus.SCREENED.value}:
+        enqueue(db, "screen_application", {"application_id": app.id})
+    return app
+
+
+SOURCES_MANUAL = {"linkedin": "LinkedIn", "indeed": "Indeed", "france_travail": "France Travail", "email": "E-mail",
+                  "telephone": "Téléphone", "spontanee": "Candidature spontanée", "recommandation": "Recommandation",
+                  "salon": "Salon, forum", "local": "Relais locaux", "autre": "Autre"}
+
+
+def add_candidate(db: Session, rec: Recruitment, user: User | None, *, first_name: str, last_name: str,
+                  email: str | None, phone: str | None, source: str, message: str | None, note: str | None,
+                  cv_bytes: bytes | None, cv_filename: str | None, cv_mime: str | None,
+                  send_ack: bool = True) -> Application:
+    """Candidature reçue hors formulaire : saisie par le dirigeant (message LinkedIn, appel, CV déposé…)
+    ou arrivée dans la boîte de réception du recrutement (`user` absent, provenance « e-mail »).
+
+    Si l'adresse e-mail est connue, le candidat reçoit l'accusé avec l'information RGPD et le lien
+    pour répondre aux questions du poste ; sinon l'interface rappelle de l'informer.
+    """
+    if not publication.is_open(rec):
+        raise FlowError("Publiez d'abord l'offre : les candidatures s'ajoutent à un recrutement en cours.")
+    if source not in SOURCES_MANUAL:
+        raise FlowError("Provenance inconnue.")
+    if len((first_name or "").strip()) < 1 or len((last_name or "").strip()) < 1:
+        raise FlowError("Indiquez le prénom et le nom.")
+    email_n = (email or "").strip().lower() or None
+    if email_n and ("@" not in email_n or "." not in email_n.split("@")[-1]):
+        raise FlowError("Adresse e-mail invalide.")
+    cand = None
+    email_h = hash_token("email:" + rec.company_id + ":" + email_n) if email_n else None
+    if email_h:
+        cand = db.execute(select(Candidate).where(Candidate.company_id == rec.company_id,
+                                                  Candidate.email_hash == email_h)).scalar_one_or_none()
+    if cand is None:
+        cand = Candidate(company_id=rec.company_id, email_hash=email_h)
+        db.add(cand)
+    cand.first_name, cand.last_name = first_name.strip()[:80], last_name.strip()[:80]
+    cand.email = email_n
+    cand.phone = (phone or "").strip()[:40] or cand.phone
+    cand.last_contact_at = utcnow()
+    db.flush()
+    existing = db.execute(select(Application).where(Application.recruitment_id == rec.id,
+                                                    Application.candidate_id == cand.id)).scalar_one_or_none()
+    if existing and existing.status != ApplicationStatus.WITHDRAWN.value:
+        raise FlowError("Cette personne a déjà une candidature pour ce poste.", 409)
+    app = existing or Application(recruitment_id=rec.id, candidate_id=cand.id)
+    app.source = source
+    app.added_by = user.id if user else None
+    app.message = (message or "").strip()[:3000] or None
+    app.status = ApplicationStatus.RECEIVED.value
+    app.seen_at = utcnow() if user else None
+    if cv_bytes:
+        _store_cv(app, cv_bytes, cv_filename, cv_mime)
+    elif app.message:
+        app.cv_text = app.message
+    if existing is None:
+        db.add(app)
+    db.flush()
+    if user and (note or "").strip():
+        add_note(db, app, user, note or "")
+    audit.log(db, "application.added" if user else "application.received", actor_type="user" if user else "system",
+              actor_id=user.id if user else None, company_id=rec.company_id, recruitment_id=rec.id,
+              entity="application", entity_id=app.id,
+              details={"source": source, "has_cv": bool(cv_bytes), "has_email": bool(email_n)})
+    if email_n and send_ack:
+        _acknowledge_received(db, rec, app, source)
+    purge.schedule_candidate(db, cand)
+    after_new_application(db, rec, app)
+    return app
+
+
+def _acknowledge_received(db: Session, rec: Recruitment, app: Application, channel: str) -> None:
+    company = db.get(Company, rec.company_id)
+    assert company is not None
+    cand = app.candidate
+    p = rec.profile or {}
+    complete = public_url(f"/offres/{rec.public_token}?src={app.source}") if (p.get("criteria") or p.get("questions")) else None
+    subject, body = comms.acknowledgment_received(company, rec, cand.first_name, public_url(f"/candidat/{candidate_token(cand)}"),
+                                                  public_url(f"/confidentialite/{company.slug}"), complete, channel)
+    email_candidate(db, cand, kind="acknowledgment", subject=subject, body=body, company_id=rec.company_id,
+                    recruitment_id=rec.id)
+    cand.information_delivered_at = utcnow()
+
+
+def add_note(db: Session, app: Application, user: User, text: str) -> Any:
+    from .models import CandidateNote
+
+    t = (text or "").strip()
+    if len(t) < 2:
+        raise FlowError("Écrivez la note.")
+    note = CandidateNote(application_id=app.id, author_id=user.id, text=t[:2000])
+    db.add(note)
+    db.flush()
+    rec = app.recruitment
+    audit.log(db, "note.added", actor_type="user", actor_id=user.id, company_id=rec.company_id, recruitment_id=rec.id,
+              entity="application", entity_id=app.id)
+    return note
+
+
+# ---------------------------------------------------------------------------
+# Pipeline : déplacer une candidature d'une colonne à l'autre
+# ---------------------------------------------------------------------------
+
+def proposed_ids(db: Session, rec: Recruitment) -> set[str]:
+    """Candidatures cochées dans la sélection en attente de validation."""
+    prop = get_pending(db, rec, "shortlist")
+    return set(prop.payload.get("application_ids", [])) if prop else set()
+
+
+def stage_of(app: Application, proposed: set[str] | None = None) -> str | None:
+    st = app.status
+    if proposed and app.id in proposed and st in {ApplicationStatus.RECEIVED.value, ApplicationStatus.SCREENED.value}:
+        return "preselectionne"
+    if st == ApplicationStatus.WITHDRAWN.value:
+        return None
+    if st == ApplicationStatus.HIRED.value:
+        return "embauche"
+    if st in {ApplicationStatus.REJECTED.value, ApplicationStatus.NOT_SHORTLISTED.value}:
+        return "refuse"
+    if st in {ApplicationStatus.BOOKED.value, ApplicationStatus.INTERVIEWED.value}:
+        return "entretien"
+    if st in {ApplicationStatus.SHORTLISTED.value, ApplicationStatus.INVITED.value}:
+        return "preselectionne"
+    return "a_evaluer" if app.seen_at else "recu"
+
+
+def pipeline_move(db: Session, rec: Recruitment, user: User, app: Application, to: str) -> str:
+    """Présélectionner ou remettre « à évaluer » depuis le pipeline. Renvoie un message court.
+
+    Les autres colonnes passent par leurs gestes habituels : « Refusé » (réponse au candidat),
+    « Entretien » (date à fixer), « Embauché » (décision et réponses à tous).
+    """
+    state = S(rec.state)
+    cur = stage_of(app, proposed_ids(db, rec))
+    if to == "preselectionne":
+        if cur == "preselectionne":
+            return "Déjà présélectionné(e)."
+        if cur not in {"recu", "a_evaluer", "refuse"} or app.status == ApplicationStatus.REJECTED.value:
+            raise FlowError("Cette candidature a déjà reçu une réponse : elle ne peut plus être présélectionnée.")
+        app.seen_at = app.seen_at or utcnow()
+        if state in {S.COLLECTING, S.SHORTLIST_REVIEW}:
+            prop = get_pending(db, rec, "shortlist")
+            if prop is None:
+                request_screening(db, rec, user)  # prépare la sélection (synthèse de toutes les candidatures)
+                prop = get_pending(db, rec, "shortlist")
+            if prop is None:
+                return "Synthèse en préparation : réessayez dans un instant."
+            ids = list(prop.payload.get("application_ids", []))
+            if app.id not in ids:
+                prop.payload = {**prop.payload, "application_ids": ids + [app.id]}
+            return "Ajouté(e) à la sélection : validez-la pour inviter les candidats."
+        if state in {S.SCHEDULING, S.INTERVIEWING}:
+            from .modules.mailing import bulk_action
+
+            bulk_action(db, rec, user, [app.id], "shortlist")
+            return "Ajouté(e) aux entretiens."
+        raise FlowError("Ce recrutement n'accepte plus de présélection.")
+    if to in {"a_evaluer", "recu"}:
+        if cur == "refuse" and app.rejection_due_at and not app.rejection_sent_at:
+            from .services.automations import undo_rejection
+
+            undo_rejection(db, app, user)
+            return "Refus annulé : aucun message n'est parti."
+        if cur == "preselectionne" and state == S.SHORTLIST_REVIEW:
+            prop = get_pending(db, rec, "shortlist")
+            if prop and app.id in prop.payload.get("application_ids", []):
+                prop.payload = {**prop.payload,
+                                "application_ids": [x for x in prop.payload["application_ids"] if x != app.id]}
+                return "Retiré(e) de la sélection à valider."
+        if cur in {"recu", "a_evaluer"}:
+            app.seen_at = app.seen_at or utcnow()
+            return "À évaluer."
+        raise FlowError("Ce retour n'est plus possible à cette étape : la personne a été prévenue ou invitée. "
+                        "Écrivez-lui depuis sa fiche si besoin.")
+    raise FlowError("Utilisez l'action correspondante : réponse au candidat, date d'entretien ou décision.")
+
+
 def candidate_token(cand: Candidate) -> str:
     """Lien personnel et stable du candidat (consulter ses données, retirer sa candidature)."""
     if cand.access_token_enc:
@@ -386,7 +608,13 @@ def candidate_token(cand: Candidate) -> str:
 
 def after_new_application(db: Session, rec: Recruitment, app: Application) -> None:
     state = S(rec.state)
+    if app.added_by is None:
+        from .services.automations import notify_new_application
+
+        notify_new_application(db, rec, app)
     if state == S.COLLECTING:
+        # Synthèse critère par critère dès l'arrivée (par règles), visible dans le pipeline.
+        enqueue(db, "screen_application", {"application_id": app.id})
         n = db.execute(select(func.count(Application.id)).where(
             Application.recruitment_id == rec.id, Application.status != ApplicationStatus.WITHDRAWN.value)).scalar() or 0
         pending = get_pending(db, rec, "start_screening")
@@ -436,7 +664,8 @@ def run_screening(db: Session, rec: Recruitment) -> None:
     summary += (f" {len(proposed)} {'sont pré-cochés' if len(proposed) > 1 else 'est pré-coché'} : validez ou ajustez."
                 if proposed else " Choisissez qui rencontrer.")
     create_proposal(db, rec, "shortlist", "Sélection à valider", summary,
-                    {"application_ids": proposed, "counts": {k: len(v) for k, v in groups.items()}}, step=2)
+                    {"application_ids": proposed, "suggested": proposed,
+                     "counts": {k: len(v) for k, v in groups.items()}}, step=2)
 
 
 def accept_shortlist(db: Session, rec: Recruitment, user: User, prop: Proposal, selected: list[str] | None) -> None:
@@ -866,6 +1095,7 @@ def accept_closing(db: Session, rec: Recruitment, user: User, prop: Proposal, te
         offer.status = "closed"
     transition(db, rec, S.CLOSED, actor_type="user", actor_id=user.id)
     publication.withdraw(db, rec, offer)
+    _remind_manual_withdrawal(db, rec, offer, user)
     if rec.outcome == "hired":
         for months in get_settings().followup_months:
             enqueue(db, "followup", {"recruitment_id": rec.id, "months": months},
@@ -893,6 +1123,16 @@ def abandon(db: Session, rec: Recruitment, user: User) -> None:
     if offer:
         offer.status = "closed"
     publication.withdraw(db, rec, offer)
+    _remind_manual_withdrawal(db, rec, offer, user)
+
+
+def _remind_manual_withdrawal(db: Session, rec: Recruitment, offer: Offer | None, user: User) -> None:
+    """L'offre publiée à la main (LinkedIn, Indeed…) ne se retire pas toute seule : on le rappelle."""
+    sites = publication.manual_posted(offer)
+    if sites:
+        notify_user(db, user, kind="info:withdraw", subject=f"Offre à retirer — {rec.title}",
+                    text=comms.closing_reminder_to_owner(rec, sites), recruitment_id=rec.id,
+                    link=action_link(db, user, None, f"/recrutements/{rec.id}/offre"))
 
 
 def followup(db: Session, rec: Recruitment, months: int) -> None:

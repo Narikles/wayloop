@@ -79,6 +79,10 @@ class Company(Base):
     plan_period_end: Mapped[datetime | None] = mapped_column(nullable=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Automatisations (offres Pro et Agence) : remerciement des refusés, relances, récapitulatif,
+    # alerte à chaque candidature. Valeurs absentes = réglages par défaut (services/automations.py).
+    automations: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_recap_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     users: Mapped[list[User]] = relationship(back_populates="company")
@@ -91,7 +95,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    role: Mapped[str] = mapped_column(String(20), default="owner")  # owner|manager|operator
+    role: Mapped[str] = mapped_column(String(20), default="owner")  # owner (titulaire du compte) | member (équipe)
     theme: Mapped[str] = mapped_column(String(10), default="light")  # light|dark (thème de l'interface)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
@@ -150,9 +154,11 @@ class Offer(Base):
     long_text: Mapped[str] = mapped_column(Text)
     alerts: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft|published|closed
-    # Diffusion : [{id, label, status: online|sent|error, at, detail}]
+    # Diffusion : [{id, label, mode: auto|manual, status: online|todo|posted|closed, at, detail}].
+    # « auto » : Google pour l'emploi et flux partenaires ; « manual » : sites où le dirigeant colle
+    # le texte préparé (LinkedIn, Indeed, France Travail…) et coche « publiée ».
     channels: Mapped[list] = mapped_column(JSON, default=list)
-    created_by: Mapped[str] = mapped_column(String(20), default="system")  # system|user
+    created_by: Mapped[str] = mapped_column(String(20), default="system")  # system|assistant|user
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     validated_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
@@ -208,6 +214,15 @@ class Application(Base):
     rescued: Mapped[bool] = mapped_column(Boolean, default=False)  # repêché hors groupe « remplit »
     removed_by_manager: Mapped[bool] = mapped_column(Boolean, default=False)
     screened_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # Ajoutée à la main par le dirigeant (message LinkedIn, appel, candidature spontanée…).
+    added_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    seen_at: Mapped[datetime | None] = mapped_column(nullable=True)  # ouverte par le dirigeant (sinon « Reçu »)
+    relance_sent_at: Mapped[datetime | None] = mapped_column(nullable=True)  # relance « questions à remplir »
+    # Réponse « non retenu » : envoyée tout de suite, ou programmée (remerciement automatique,
+    # annulable jusqu'à l'envoi) ; l'étape précédente permet d'annuler.
+    rejection_due_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    rejection_sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status_before_rejection: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     recruitment: Mapped[Recruitment] = relationship(back_populates="applications")
@@ -217,6 +232,34 @@ class Application(Base):
     )
     interviews: Mapped[list[Interview]] = relationship(back_populates="application", cascade="all, delete-orphan")
     debrief: Mapped[Debrief | None] = relationship(back_populates="application", cascade="all, delete-orphan")
+    notes: Mapped[list[CandidateNote]] = relationship(back_populates="application", cascade="all, delete-orphan",
+                                                      order_by="CandidateNote.created_at")
+
+
+class CandidateNote(Base):
+    """Note libre du dirigeant ou de son équipe sur une candidature (chiffrée, purgée avec le candidat)."""
+
+    __tablename__ = "candidate_notes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    application_id: Mapped[str] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    text: Mapped[str] = mapped_column(EncryptedText)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    application: Mapped[Application] = relationship(back_populates="notes")
+
+
+class InboundEmail(Base):
+    """E-mails reçus sur l'adresse de candidature (empreinte seulement : aucune donnée personnelle)."""
+
+    __tablename__ = "inbound_emails"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
+    message_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    recruitment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))  # created|ignored|error
+    detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class ScreeningEvaluation(Base):
@@ -424,7 +467,8 @@ class UsageRecord(Base):
     __tablename__ = "usage_records"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_id)
     recruitment_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    kind: Mapped[str] = mapped_column(String(40))  # message:email
+    company_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    kind: Mapped[str] = mapped_column(String(40))  # message:email · ai:draft
     model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
