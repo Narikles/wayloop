@@ -1,4 +1,4 @@
-import type { Criterion, PageId } from "../api/types";
+import type { Criterion, PageId, PipelineStage } from "../api/types";
 
 const TZ = "Europe/Paris";
 
@@ -54,15 +54,32 @@ export const initials = (name?: string | null) =>
 export const SOURCE_LABELS: Record<string, string> = {
   lien: "Lien direct", google: "Google", france_travail: "France Travail", apec: "Apec", linkedin: "LinkedIn", indeed: "Indeed",
   jooble: "Jooble", talent: "Talent.com", adzuna: "Adzuna", jobijoba: "Jobijoba", optioncarriere: "Optioncarrière", jobrapido: "Jobrapido",
-  page_carriere: "Page de l'offre",
+  page_carriere: "Page de l'offre", email: "E-mail", telephone: "Téléphone", spontanee: "Candidature spontanée",
+  recommandation: "Recommandation", salon: "Salon, forum", local: "Relais locaux", autre: "Autre",
 };
+/** Provenances proposées pour une candidature ajoutée à la main. */
+export const MANUAL_SOURCES: { id: string; label: string }[] = [
+  { id: "linkedin", label: "LinkedIn (message)" }, { id: "email", label: "E-mail" }, { id: "telephone", label: "Téléphone" },
+  { id: "indeed", label: "Indeed" }, { id: "france_travail", label: "France Travail" }, { id: "spontanee", label: "Candidature spontanée" },
+  { id: "recommandation", label: "Recommandation" }, { id: "salon", label: "Salon, forum" }, { id: "local", label: "Relais locaux" },
+  { id: "autre", label: "Autre" },
+];
 export const STAGE: Record<string, { label: string; tone: string }> = {
-  received: { label: "Nouvelle", tone: "" }, screened: { label: "Nouvelle", tone: "" },
-  not_shortlisted: { label: "Non retenue", tone: "" }, shortlisted: { label: "Sélectionnée", tone: "brand" },
+  received: { label: "Reçue", tone: "" }, screened: { label: "À évaluer", tone: "" },
+  not_shortlisted: { label: "Réponse à envoyer", tone: "warn" }, shortlisted: { label: "Présélectionnée", tone: "brand" },
   invited: { label: "Invitée", tone: "brand" }, booked: { label: "Entretien prévu", tone: "brand" },
-  interviewed: { label: "Entretien fait", tone: "violet" }, hired: { label: "Recrutée", tone: "ok" },
-  rejected: { label: "Réponse envoyée", tone: "" }, withdrawn: { label: "Retirée", tone: "" },
+  interviewed: { label: "Entretien fait", tone: "violet" }, hired: { label: "Embauchée", tone: "ok" },
+  rejected: { label: "Refusée", tone: "" }, withdrawn: { label: "Retirée", tone: "" },
 };
+/** Colonnes du pipeline (Reçu → À évaluer → Présélectionné → Entretien → Refusé / Embauché). */
+export const PIPELINE: { id: PipelineStage; label: string; hint: string }[] = [
+  { id: "recu", label: "Reçu", hint: "Nouvelles candidatures, pas encore ouvertes" },
+  { id: "a_evaluer", label: "À évaluer", hint: "Ouvertes, en attente de votre choix" },
+  { id: "preselectionne", label: "Présélectionné", hint: "À rencontrer en entretien" },
+  { id: "entretien", label: "Entretien", hint: "Date fixée ou entretien fait" },
+  { id: "refuse", label: "Refusé", hint: "Remercié ou réponse à envoyer" },
+  { id: "embauche", label: "Embauché", hint: "Personne recrutée" },
+];
 export const GROUPS: { id: string; label: string; short: string; tone: string }[] = [
   { id: "meets", label: "Remplissent les critères indispensables", short: "Remplit", tone: "ok" },
   { id: "partial", label: "Les remplissent en partie", short: "En partie", tone: "warn" },

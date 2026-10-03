@@ -25,7 +25,7 @@ export const useApi = () => useContext(ApiCtx);
 type Session = { me: Me | null; reload: () => Promise<void>; version: number; touch: () => void };
 export const SessionCtx = createContext<Session>({ me: null, reload: async () => {}, version: 0, touch: () => {} });
 export const useSession = () => useContext(SessionCtx);
-export const useIsPremium = () => useSession().me?.plan.id === "premium";
+export const useIsPremium = () => useSession().me?.plan.id !== "free";
 export const useHas = (feature: string) => !!useSession().me?.plan.features.includes(feature);
 
 /** Thème de l'interface : clair par défaut, sombre au choix (Paramètres > Apparence). */
@@ -80,7 +80,7 @@ export function Providers({ children, upgradeModal }: { children: ReactNode; upg
   );
 }
 
-/** Exécute une action ; une erreur 402 (offre) ouvre la fenêtre Premium, les autres un message. */
+/** Exécute une action ; une erreur 402 (offre) ouvre la fenêtre des offres, les autres un message. */
 export function useAction() {
   const notify = useToast();
   const upgrade = useUpgrade();
