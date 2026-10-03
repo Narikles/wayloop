@@ -32,7 +32,7 @@ function QuestionInput({ q, value, onChange }: { q: ScreeningQuestion; value: un
       </div>
     );
   }
-  return <textarea id={id} className="textarea" rows={2} value={(value as string) || ""} onChange={(e) => onChange(e.target.value)} />;
+  return <textarea id={id} className="textarea" rows={3} maxLength={500} value={(value as string) || ""} onChange={(e) => onChange(e.target.value)} />;
 }
 
 export default function OfferPage() {
@@ -102,7 +102,7 @@ export default function OfferPage() {
                   {o.questions.length > 0 && (
                     <div className="stack">
                       <hr className="sep" />
-                      <div className="stack sm"><h4>Quelques questions sur le poste</h4><span className="xs muted">Elles portent uniquement sur les critères du poste. Vos réponses seront rapprochées de votre CV.</span></div>
+                      <div className="stack sm"><h4>Quelques questions sur le poste</h4><span className="xs muted">Elles portent uniquement sur le poste. Les réponses aux critères sont rapprochées de votre CV ; les questions ouvertes sont lues telles quelles, sans note.</span></div>
                       {o.questions.map((q) => (
                         <Field key={q.id} htmlFor={q.input === "yesno" ? undefined : `q-${q.id}`} label={<span id={`ql-${q.id}`}>{q.label}{!q.required && <span className="muted"> (facultatif)</span>}</span>} hint={q.help}>
                           <QuestionInput q={q} value={answers[q.id]} onChange={(v) => setAnswers({ ...answers, [q.id]: v })} />
