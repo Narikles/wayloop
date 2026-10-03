@@ -1,7 +1,7 @@
-"""Rédaction de l'offre à partir de la fiche de poste (modèle de texte, sans IA).
+"""Rédaction de l'offre à partir de la fiche de poste (modèle de texte).
 
 Le texte est conforme par construction : il ne reprend que les champs du formulaire,
-eux-mêmes contrôlés à la saisie.
+eux-mêmes contrôlés à la saisie (y compris quand l'assistant les a pré-remplis).
 """
 from __future__ import annotations
 
@@ -37,6 +37,8 @@ def offer_from_profile(p: dict[str, Any], company: str) -> dict[str, str]:
     lines = [title, ""]
     lines.append(p.get("company_pitch") or f"{company} recrute.")
     lines.append("")
+    if p.get("summary"):
+        lines += ["Le poste", p["summary"], ""]
     if missions:
         lines += ["Vos missions"] + [f"- {m}" for m in missions] + [""]
     if req or nice:

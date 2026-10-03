@@ -92,11 +92,48 @@ def send_bulk(db: Session, rec: Recruitment, user: User, apps: list[Application]
 FINAL = {ApplicationStatus.HIRED.value, ApplicationStatus.REJECTED.value, ApplicationStatus.WITHDRAWN.value}
 
 
+def deliver_rejection(db: Session, rec: Recruitment, user: User | None, apps: list[Application], subject: str,
+                      body: str) -> int:
+    """Envoie la réponse « non retenu » (tout de suite, ou à l'échéance d'un refus programmé)."""
+    from ..db import utcnow
+    from ..orchestrator import _release_slot, candidate_token, public_url
+    from ..services import purge
+
+    company = db.get(Company, rec.company_id)
+    assert company is not None
+    sent = 0
+    for a in apps:
+        link = public_url(f"/candidat/{candidate_token(a.candidate)}")
+        msg = email_candidate(db, a.candidate, kind="closing:rejected", subject=render(subject, a, rec, company),
+                              body=render(body, a, rec, company, link), company_id=rec.company_id,
+                              recruitment_id=rec.id, reply_to=user.email if user else None)
+        sent += 1 if msg else 0
+        for iv in a.interviews:
+            if iv.status in {"invited", "booked"}:
+                _release_slot(db, iv)
+                iv.status = "cancelled"
+        scheduled = a.rejection_due_at is not None
+        a.status = ApplicationStatus.REJECTED.value
+        a.shortlisted = False
+        a.rejection_sent_at = utcnow()
+        a.rejection_due_at = None
+        a.status_before_rejection = None
+        if not scheduled:
+            audit.log(db, "application.rejected", actor_type="user" if user else "system",
+                      actor_id=user.id if user else None, company_id=rec.company_id, recruitment_id=rec.id,
+                      entity="application", entity_id=a.id, details={"group_suggested": a.group_suggested})
+        purge.schedule_candidate(db, a.candidate)
+    if sent:
+        audit.log(db, "message.bulk_sent", actor_type="user" if user else "system", actor_id=user.id if user else None,
+                  company_id=rec.company_id, recruitment_id=rec.id, details={"kind": "closing:rejected", "count": sent})
+    return sent
+
+
 def bulk_action(db: Session, rec: Recruitment, user: User, ids: list[str], action: str, subject: str | None = None,
-                body: str | None = None) -> dict:
+                body: str | None = None, immediate: bool = False) -> dict:
     from ..models import RecruitmentState as S
-    from ..orchestrator import _release_slot, free_slots, invite_shortlisted, new_interview
-    from ..services import plans, purge
+    from ..orchestrator import free_slots, invite_shortlisted, new_interview
+    from ..services import plans
 
     apps = _targets(rec, ids)
     company = db.get(Company, rec.company_id)
@@ -109,19 +146,15 @@ def bulk_action(db: Session, rec: Recruitment, user: User, ids: list[str], actio
         if not todo:
             raise FlowError("Ces candidatures ont déjà reçu une réponse.")
         d_subject, d_body = rejection_template(company, rec)
-        n = send_bulk(db, rec, user, todo, subject or d_subject, body or d_body, kind="closing:rejected")
-        for a in todo:
-            for iv in a.interviews:
-                if iv.status in {"invited", "booked"}:
-                    _release_slot(db, iv)
-                    iv.status = "cancelled"
-            a.status = ApplicationStatus.REJECTED.value
-            a.shortlisted = False
-            audit.log(db, "application.rejected", actor_type="user", actor_id=user.id, company_id=rec.company_id,
-                      recruitment_id=rec.id, entity="application", entity_id=a.id,
-                      details={"group_suggested": a.group_suggested})
-            purge.schedule_candidate(db, a.candidate)
-        return {"done": n}
+        subj, text = (subject or d_subject), (body or d_body)
+        if len(subj.strip()) < 3 or len(text.strip()) < 10:
+            raise FlowError("Écrivez un objet et un message.")
+        from ..services import automations
+
+        if not immediate and automations.active(company, "auto_reject"):
+            due = automations.schedule_rejections(db, rec, user, todo, subj, text)
+            return {"done": len(todo), "scheduled": len(todo), "due_at": due.isoformat()}
+        return {"done": deliver_rejection(db, rec, user, todo, subj, text)}
 
     if action == "shortlist":
         state = S(rec.state)

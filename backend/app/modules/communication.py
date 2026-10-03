@@ -59,6 +59,61 @@ Ce que nous faisons de vos données :
     return f"Candidature reçue : {title}", body
 
 
+def acknowledgment_received(company: Company, rec: Recruitment, first_name: str | None, data_link: str,
+                            privacy_link: str, complete_link: str | None, channel: str) -> tuple[str, str]:
+    """Accusé pour une candidature reçue par e-mail ou transmise autrement (message, appel) : même
+    information RGPD que l'accusé du formulaire, et lien pour répondre aux questions du poste."""
+    title = rec.profile.get("title") or rec.title
+    hello = f"Bonjour {first_name}," if first_name else "Bonjour,"
+    how = {"email": "par e-mail", "linkedin": "par LinkedIn", "telephone": "par téléphone"}.get(channel, "")
+    complete = (f"\n\nPour compléter votre candidature, merci de répondre à quelques questions sur le poste "
+                f"(2 minutes, CV facultatif si vous l'avez déjà envoyé) : {complete_link}") if complete_link else ""
+    body = f"""{hello}
+
+Nous avons bien reçu votre candidature{(' ' + how) if how else ''} au poste « {title} ». Merci de votre intérêt.{complete}
+
+Comment se passe la suite :
+- {company.name} examine toutes les candidatures et vous répondra, que la réponse soit positive ou non.
+- Si votre profil correspond, nous vous proposerons un entretien.
+
+Ce que nous faisons de vos données :
+- Responsable du traitement : {company.name}. Finalité : examiner votre candidature à ce poste. Vos coordonnées et votre CV ont été enregistrés dans notre outil de recrutement à partir de votre envoi.
+- Vos réponses et votre CV sont comparés aux critères du poste selon des règles fixes, identiques pour tous ; les informations sans rapport avec le poste (âge, adresse, situation de famille…) sont masquées. Rien n'est décidé automatiquement : c'est une personne de l'entreprise qui décide.
+- {retention_sentence(company)}
+- Vous pouvez consulter vos données, retirer votre candidature ou demander leur suppression à tout moment : {data_link}
+- Notice complète et contact : {privacy_link}{_sign(company)}"""
+    return f"Candidature reçue : {title}", body
+
+
+def complete_reminder(company: Company, rec: Recruitment, first_name: str | None, complete_link: str,
+                      data_link: str) -> tuple[str, str]:
+    title = rec.profile.get("title") or rec.title
+    body = f"""Bonjour{(' ' + first_name) if first_name else ''},
+
+Votre candidature au poste « {title} » est bien enregistrée. Il ne manque que vos réponses à quelques questions sur le poste (2 minutes) : {complete_link}
+
+Si vous ne souhaitez plus donner suite, vous pouvez retirer votre candidature ici : {data_link}{_sign(company)}"""
+    return f"Votre candidature au poste « {title} » : une étape à finir", body
+
+
+def invitation_reminder(company: Company, rec: Recruitment, first_name: str | None,
+                        booking_link: str | None) -> tuple[str, str]:
+    title = rec.profile.get("title") or rec.title
+    ask = (f"Choisissez le créneau qui vous convient : {booking_link}" if booking_link else
+           "Pourriez-vous nous indiquer vos disponibilités ? Il vous suffit de répondre à ce message.")
+    body = f"""Bonjour{(' ' + first_name) if first_name else ''},
+
+Nous aimerions toujours vous rencontrer pour le poste « {title} ». {ask}
+
+Si vous nous avez déjà répondu, ne tenez pas compte de ce message.{_sign(company)}"""
+    return f"Rappel — entretien pour le poste « {title} »", body
+
+
+def closing_reminder_to_owner(rec: Recruitment, sites: list[str]) -> str:
+    return (f"{rec.title} : le recrutement est clos. L'offre a été retirée de Google et de sa page. Pensez à la "
+            f"retirer aussi des sites où vous l'avez publiée vous-même : {', '.join(sites)}.")
+
+
 def invitation(company: Company, rec: Recruitment, first_name: str | None, booking_link: str) -> tuple[str, str]:
     title = rec.profile.get("title") or rec.title
     body = f"""Bonjour{(' ' + first_name) if first_name else ''},
@@ -153,8 +208,8 @@ Contact pour vos données : {contact}.
 Finalité : gérer le recrutement au poste auquel vous avez postulé (réception, examen, entretiens, réponse).
 Base légale : mesures précontractuelles prises à votre demande (art. 6.1.b du RGPD) et intérêt légitime de l'entreprise à recruter (art. 6.1.f).
 
-Données traitées : celles que vous transmettez (identité, coordonnées, CV, message, réponses aux questions du poste), les échanges liés au recrutement, les notes d'entretien.
-Aucune donnée n'est collectée sur Internet à votre sujet (réseaux sociaux, moteurs de recherche).
+Données traitées : celles que vous transmettez, par le formulaire de candidature, par e-mail ou par message (identité, coordonnées, CV, message, réponses aux questions du poste), les échanges liés au recrutement, les notes de l'entreprise et les notes d'entretien.
+Aucune donnée n'est collectée sur Internet à votre sujet (réseaux sociaux, moteurs de recherche). Vos données ne sont transmises à aucun service d'intelligence artificielle.
 
 Méthode de présélection (art. L1221-8 du Code du travail) : vos réponses aux questions du poste et votre CV sont comparés, critère par critère, aux exigences fixées par l'entreprise, selon des règles fixes et identiques pour tous. Les informations sans rapport avec le poste (âge, adresse, situation de famille, nationalité, santé…) sont masquées avant cet examen. Aucune note n'est attribuée et personne n'est écarté automatiquement : toutes les candidatures restent consultables et une personne de l'entreprise prend chaque décision. Les entretiens suivent les mêmes questions, liées au poste, pour toutes les personnes rencontrées.
 

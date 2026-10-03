@@ -1,9 +1,12 @@
 """Fiche de poste par formulaire et questions posées aux candidats.
 
-Le dirigeant décrit son besoin avec des champs typés. Chaque critère devient une question
-posée au candidat au moment où il postule ; sa réponse est comparée au seuil fixé par le
-dirigeant selon une règle explicite. Les textes libres sont rendus conformes d'office ;
-seules les mentions impossibles à corriger sans changer le sens sont signalées, au bon champ.
+Le dirigeant décrit son besoin avec des champs typés (que l'assistant peut pré-remplir à
+partir d'une phrase). Chaque critère devient une question posée au candidat au moment où il
+postule ; sa réponse est comparée au seuil fixé par le dirigeant selon une règle explicite.
+S'y ajoutent jusqu'à trois questions de présélection à réponse libre (questions techniques sur
+le métier) : elles sont montrées telles quelles au dirigeant, jamais notées. Les textes libres
+sont rendus conformes d'office ; seules les mentions impossibles à corriger sans changer le
+sens sont signalées, au bon champ.
 """
 from __future__ import annotations
 
@@ -166,6 +169,17 @@ def build_profile(form: dict[str, Any], max_required: int = 3) -> tuple[dict[str
         t = text_field(b, f"benefits.{i}", 120)
         if t:
             benefits.append(t)
+    questions = []
+    for i, q in enumerate((form.get("questions") or [])[:MAX_FREE_QUESTIONS]):
+        t = text_field(q, f"questions.{i}", 300)
+        if not t:
+            continue
+        topic = _question_violation(t)
+        if topic:
+            issues.append({"field": f"questions.{i}", "rule": "question_topic", "match": t[:80],
+                           "message": f"Question sans lien avec le poste ({topic.lower()}) : elle ne peut pas être posée."})
+            continue
+        questions.append({"id": f"q{len(questions) + 1}", "text": t})
     profile = {
         "title": title,
         "rome_code": _clean(form.get("rome_code"), 5) or None,
@@ -180,9 +194,25 @@ def build_profile(form: dict[str, Any], max_required: int = 3) -> tuple[dict[str
         "start_date": _clean(form.get("start_date"), 60) or None,
         "remote": remote,
         "company_pitch": text_field(form.get("company_pitch"), "company_pitch", 600) or None,
+        "summary": text_field(form.get("summary"), "summary", 900) or None,
         "benefits": benefits[:6],
+        "questions": questions,
     }
+    assisted = form.get("assisted")
+    if isinstance(assisted, dict) and assisted.get("engine") in {"ia", "regles"}:
+        # Provenance du brouillon (assistant IA ou règles), sans donnée personnelle.
+        profile["assisted"] = {"engine": assisted["engine"], "model": _clean(assisted.get("model"), 80) or None}
     return profile, issues
+
+
+MAX_FREE_QUESTIONS = 3
+
+
+def _question_violation(text: str) -> str | None:
+    """Mêmes garde-fous que les questions d'entretien (art. L1221-6 du Code du travail)."""
+    from .interview import question_violation
+
+    return question_violation(text)
 
 
 def require_valid(form: dict[str, Any], max_required: int = 3) -> dict[str, Any]:
@@ -225,6 +255,10 @@ def questions_for(profile: dict[str, Any]) -> list[dict[str, Any]]:
         else:
             q.update(label=p.get("text") or c["label"], input="text", max=500)
         out.append(q)
+    # Questions de présélection à réponse libre (techniques, sur le métier) : jamais notées.
+    for fq in profile.get("questions") or []:
+        out.append({"id": fq["id"], "kind": "question", "required": True, "label": fq["text"], "input": "text",
+                    "max": 500})
     return out
 
 
