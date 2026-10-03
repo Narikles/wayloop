@@ -14,10 +14,19 @@ export type Profile = {
   rome_label?: string | null;
   company_pitch?: string | null;
   benefits?: string[];
+  /** Le poste en quelques lignes (paragraphe « Le poste » de l'offre). */
+  summary?: string | null;
+  /** Questions de présélection à réponse libre (techniques, jamais notées). */
+  questions?: { id: string; text: string }[];
+  /** Provenance du brouillon : assistant IA ou règles. */
+  assisted?: Assisted | null;
 };
+
+export type Assisted = { engine: "ia" | "regles"; model?: string | null };
 
 export type ScreeningQuestion = {
   id: string;
+  /** « question » : question de présélection à réponse libre ; sinon le type du critère. */
   kind: string;
   label: string;
   input: "number" | "select" | "yesno" | "text";
@@ -47,7 +56,13 @@ export type JobForm = {
   remote?: string;
   company_pitch?: string;
   benefits: string[];
+  summary?: string;
+  questions?: string[];
+  assisted?: Assisted | null;
 };
+
+/** Brouillon préparé par l'assistant à partir d'une phrase. */
+export type Draft = { form: JobForm; engine: "ia" | "regles"; model?: string | null; notes: string[]; issues: Issue[] };
 
 /** Mention à retirer, rattachée au champ concerné (« title », « missions.2 », « long »…). */
 export type Issue = { field: string | null; rule?: string; match?: string | null; message: string };
@@ -59,8 +74,11 @@ export type FormPreview = {
   criteria?: Criterion[];
 };
 
+export type PlanId = "free" | "premium" | "agency";
+export type PlanOffer = { id: PlanId; name: string; monthly: number; yearly: number; yearly_per_month: number; features: string[]; limit: number | null };
+
 export type Billing = {
-  plan: "free" | "premium";
+  plan: PlanId;
   plan_name: string;
   status: string | null;
   interval: string | null;
@@ -72,7 +90,41 @@ export type Billing = {
   trial_days: number;
   has_customer: boolean;
   catalog: Record<string, string>;
+  plans: PlanOffer[];
+  history_days_free: number;
 };
+
+/** Diffusion : automatique (Google, flux) ou à coller soi-même (LinkedIn, Indeed, France Travail…). */
+export type DiffusionChannel = {
+  id: string;
+  label: string;
+  mode: "auto" | "manual";
+  status: "online" | "closed" | "todo" | "posted" | "removed" | "draft" | string;
+  at?: string | null;
+  detail?: string;
+  url?: string;
+  hint?: string;
+  text?: string;
+  link?: string;
+  outdated?: boolean;
+};
+
+export type Automations = {
+  auto_reject: boolean;
+  relance: boolean;
+  relance_days: number;
+  weekly_recap: boolean;
+  notify_new: boolean;
+  available: boolean;
+  delay_minutes: number;
+};
+
+export type TeamMember = { id: string; name?: string | null; email: string; role: string; me: boolean; created_at?: string | null };
+
+export type PipelineStage = "recu" | "a_evaluer" | "preselectionne" | "entretien" | "refuse" | "embauche";
+
+export type CandidateNote = { id: string; text: string; author: string; author_id?: string | null; created_at: string };
+export type TimelineItem = { at: string; kind: "event" | "email"; label: string; by?: string; status?: string };
 
 export type Channel = { id: string; label: string; status: "online" | "closed" | string; at?: string; detail?: string };
 
@@ -123,6 +175,8 @@ export type RecruitmentSummary = {
   applications: number;
   outcome?: string | null;
   pending: { id: string; kind: string; title: string; page?: PageId | null } | null;
+  /** Candidatures pas encore ouvertes (colonne « Reçu »). */
+  new_applications?: number;
 };
 
 export type Counts = {
@@ -151,6 +205,9 @@ export type RecruitmentDetail = Omit<RecruitmentSummary, "pending"> & {
   interview_minutes: number;
   free_slots: number;
   sources?: Record<string, number>;
+  stages?: Partial<Record<PipelineStage, number>>;
+  inbound_address?: string | null;
+  assisted?: Assisted | null;
   result?: any;
 };
 
@@ -182,6 +239,14 @@ export type ApplicationItem = {
   interview: { id: string; status: string; start: string | null; end: string | null; location?: string | null } | null;
   debrief_status: string | null;
   has_answers?: boolean;
+  stage?: PipelineStage | null;
+  seen?: boolean;
+  manual?: boolean;
+  rejection_due_at?: string | null;
+  rejection_sent_at?: string | null;
+  awaiting_answers?: boolean;
+  no_email?: boolean;
+  notes_count?: number;
 };
 
 export type DebriefNote = { score: number | null; notes: string; quote?: string | null };
@@ -199,6 +264,9 @@ export type ApplicationDetail = ApplicationItem & {
   answers?: { question: string; answer: string }[];
   debrief: { notes: Record<string, DebriefNote>; overall?: string | null; status: string } | null;
   messages?: SentMessage[];
+  notes?: CandidateNote[];
+  timeline?: TimelineItem[];
+  history_limited?: boolean;
 };
 
 export type InterviewItem = {
@@ -214,7 +282,7 @@ export type InterviewItem = {
   invited_at: string;
   booked_at?: string | null;
   debrief_status?: string | null;
-  /** Le candidat choisit lui-même son créneau en ligne (Premium). */
+  /** Le candidat choisit lui-même son créneau en ligne (offre Pro). */
   self_booking?: boolean;
 };
 
@@ -266,8 +334,8 @@ export type Me = {
     naf_code?: string | null;
     headcount_range?: string | null;
   } | null;
-  app: { name: string; demo_mode: boolean; environment: string };
-  plan: { id: "free" | "premium"; name: string; features: string[]; active_recruitments_limit: number | null };
+  app: { name: string; demo_mode: boolean; environment: string; ai_assistant?: boolean; inbound_email?: boolean };
+  plan: { id: PlanId; name: string; features: string[]; active_recruitments_limit: number | null };
 };
 
 export type Metrics = {
@@ -319,4 +387,5 @@ export type CandidateData = {
     evaluations: { label: string; status: string; justification?: string | null }[] }[];
 };
 
-export type BulkResult = { done: number; invited?: number; to_schedule?: number };
+export type BulkResult = { done: number; invited?: number; to_schedule?: number; scheduled?: number; due_at?: string };
+export type Pricing = { premium: { monthly: number; yearly: number; yearly_per_month: number }; agency: { monthly: number; yearly: number; yearly_per_month: number } };

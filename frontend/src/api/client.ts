@@ -4,8 +4,15 @@ import type {
   ApplicationDetail,
   ApplicationItem,
   AuditItem,
+  Automations,
   Billing,
   BulkResult,
+  DiffusionChannel,
+  Draft,
+  PipelineStage,
+  PlanId,
+  Pricing,
+  TeamMember,
   CandidateData,
   CompanyRef,
   Comparison,
@@ -57,7 +64,23 @@ export interface Api {
   refuse(id: string, proposalId: string): Promise<RecruitmentDetail>;
   startScreening(id: string): Promise<RecruitmentDetail>;
   abandon(id: string): Promise<RecruitmentDetail>;
-  bulk(id: string, body: { application_ids: string[]; action: "email" | "reject" | "shortlist"; subject?: string; body?: string }): Promise<BulkResult>;
+  bulk(id: string, body: { application_ids: string[]; action: "email" | "reject" | "shortlist"; subject?: string; body?: string; immediate?: boolean }): Promise<BulkResult>;
+  /** Assistant : une phrase → brouillon du formulaire de poste. */
+  draft(brief: string): Promise<Draft>;
+  diffusion(id: string): Promise<DiffusionChannel[]>;
+  markPosted(id: string, channel: string, posted: boolean): Promise<DiffusionChannel[]>;
+  /** Candidature reçue hors formulaire (message LinkedIn, appel, CV remis…). */
+  addCandidate(id: string, form: FormData): Promise<ApplicationItem>;
+  pipelineMove(id: string, applicationId: string, to: Extract<PipelineStage, "recu" | "a_evaluer" | "preselectionne">): Promise<{ message: string; application: ApplicationItem }>;
+  addNote(aid: string, text: string): Promise<ApplicationDetail>;
+  deleteNote(aid: string, nid: string): Promise<ApplicationDetail>;
+  undoRejection(aid: string): Promise<ApplicationItem>;
+  automations(): Promise<Automations>;
+  saveAutomations(patch: Partial<Automations>): Promise<Automations>;
+  team(): Promise<TeamMember[]>;
+  inviteMember(name: string, email: string): Promise<TeamMember[]>;
+  removeMember(uid: string): Promise<TeamMember[]>;
+  pricing(): Promise<Pricing>;
   mailTemplates(): Promise<MailTemplate[]>;
   exportUrl(id: string): string | null;
   /** Démo seulement : contenu du CSV, pour l'enregistrer par la visionneuse quand le lien direct est bloqué. */
@@ -71,7 +94,7 @@ export interface Api {
   companySearch(q: string): Promise<{ results: CompanyRef[]; error?: string }>;
 
   billing(): Promise<Billing>;
-  checkout(interval: "month" | "year"): Promise<{ url: string }>;
+  checkout(interval: "month" | "year", plan?: Exclude<PlanId, "free">): Promise<{ url: string }>;
   portal(): Promise<{ url: string }>;
   cancelDemo(): Promise<void>;
 
@@ -154,6 +177,20 @@ export const HttpApi: Api = {
   startScreening: (id) => req("POST", `/api/recruitments/${id}/screening`),
   abandon: (id) => req("POST", `/api/recruitments/${id}/abandon`),
   bulk: (id, body) => req("POST", `/api/recruitments/${id}/bulk`, body),
+  draft: (brief) => req("POST", "/api/assistant/draft", { brief }),
+  diffusion: (id) => req("GET", `/api/recruitments/${id}/diffusion`),
+  markPosted: (id, channel, posted) => req("PUT", `/api/recruitments/${id}/diffusion/${channel}`, { posted }),
+  addCandidate: (id, form) => req("POST", `/api/recruitments/${id}/candidates`, form),
+  pipelineMove: (id, application_id, to) => req("POST", `/api/recruitments/${id}/pipeline`, { application_id, to }),
+  addNote: (aid, text) => req("POST", `/api/applications/${aid}/notes`, { text }),
+  deleteNote: (aid, nid) => req("DELETE", `/api/applications/${aid}/notes/${nid}`),
+  undoRejection: (aid) => req("POST", `/api/applications/${aid}/undo-rejection`),
+  automations: () => req("GET", "/api/automations"),
+  saveAutomations: (patch) => req("PUT", "/api/automations", patch),
+  team: () => req("GET", "/api/team"),
+  inviteMember: (name, email) => req("POST", "/api/team", { name, email }),
+  removeMember: (uid) => req("DELETE", `/api/team/${uid}`),
+  pricing: () => req("GET", "/api/public/pricing"),
   mailTemplates: () => req("GET", "/api/mail-templates"),
   exportUrl: (id) => `/api/recruitments/${id}/export.csv`,
 
@@ -165,7 +202,7 @@ export const HttpApi: Api = {
   companySearch: (q) => req("GET", `/api/public/entreprises?q=${encodeURIComponent(q)}`),
 
   billing: () => req("GET", "/api/billing"),
-  checkout: (interval) => req("POST", "/api/billing/checkout", { interval }),
+  checkout: (interval, plan = "premium") => req("POST", "/api/billing/checkout", { interval, plan }),
   portal: () => req("POST", "/api/billing/portal"),
   cancelDemo: () => req("POST", "/api/billing/cancel-demo"),
 

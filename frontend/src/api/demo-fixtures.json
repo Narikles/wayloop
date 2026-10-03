@@ -194,10 +194,12 @@
   "start_date": "Dès que possible",
   "remote": null,
   "company_pitch": "Négoce Durand distribue des matériaux de construction aux artisans de la région lyonnaise depuis 1987. Nous sommes 18 personnes.",
+  "summary": null,
   "benefits": [
    "Tickets restaurant",
    "Mutuelle prise en charge à 60 %"
-  ]
+  ],
+  "questions": []
  },
  "offer": {
   "short": "Négoce Durand recrute : Assistant commercial / Assistante commerciale — CDI · Villeurbanne (69100) · 2 100 à 2 400 € brut / mois. Missions : établir les devis et suivre leur transformation; relancer les clients; préparer et suivre les commandes jusqu'à la livraison. Indispensable : 2 ans d'expérience en administration des ventes, Excel (niveau autonome). Horaires : 35 h, du lundi au vendredi. Réponse assurée à chaque candidature.",
@@ -206,8 +208,9 @@
    {
     "id": "google",
     "label": "Google pour l'emploi",
+    "mode": "auto",
     "status": "online",
-    "at": "2026-10-02T14:18:35.384103+00:00"
+    "at": "2026-10-03T10:38:31.209889+00:00"
    }
   ]
  },
@@ -362,7 +365,7 @@
   },
   {
    "name": "Karim Benali",
-   "source": "google",
+   "source": "linkedin",
    "group": "meets",
    "pool_consent": true,
    "evaluations": [
@@ -493,7 +496,7 @@
   },
   {
    "name": "Thomas Petit",
-   "source": "google",
+   "source": "indeed",
    "group": "partial",
    "pool_consent": false,
    "evaluations": [
@@ -555,7 +558,7 @@
   },
   {
    "name": "Inès Lefèvre",
-   "source": "lien",
+   "source": "google",
    "group": "meets",
    "pool_consent": true,
    "evaluations": [
@@ -622,7 +625,7 @@
   },
   {
    "name": "Lucas Garnier",
-   "source": "google",
+   "source": "france_travail",
    "group": "partial",
    "pool_consent": false,
    "evaluations": [
@@ -684,7 +687,7 @@
   },
   {
    "name": "Sarah Nguyen",
-   "source": "lien",
+   "source": "linkedin",
    "group": "meets",
    "pool_consent": false,
    "evaluations": [
@@ -772,7 +775,15 @@
    "Votre candidature au poste « Assistant commercial / Assistante commerciale »",
    "Bonjour {prénom},\n\nNous avons reçu de nombreuses candidatures et n'avons pas retenu la vôtre pour la suite du processus. Cette réponse ne porte pas sur vos qualités : elle tient aux critères précis du poste.\n\nNous vous souhaitons une belle réussite dans vos recherches.\n\nVos données sont conservées au plus 24 mois après notre dernier échange, puis supprimées automatiquement. Vous pouvez demander leur suppression dès maintenant : {lien}\n\nNégoce Durand"
   ],
-  "privacy": "Notice d'information — candidatures chez Négoce Durand\n\nResponsable du traitement : Négoce Durand, 12 rue des Artisans, 69100 Villeurbanne.\nContact pour vos données : contact@negoce-durand.example.\n\nFinalité : gérer le recrutement au poste auquel vous avez postulé (réception, examen, entretiens, réponse).\nBase légale : mesures précontractuelles prises à votre demande (art. 6.1.b du RGPD) et intérêt légitime de l'entreprise à recruter (art. 6.1.f).\n\nDonnées traitées : celles que vous transmettez (identité, coordonnées, CV, message, réponses aux questions du poste), les échanges liés au recrutement, les notes d'entretien.\nAucune donnée n'est collectée sur Internet à votre sujet (réseaux sociaux, moteurs de recherche).\n\nMéthode de présélection (art. L1221-8 du Code du travail) : vos réponses aux questions du poste et votre CV sont comparés, critère par critère, aux exigences fixées par l'entreprise, selon des règles fixes et identiques pour tous. Les informations sans rapport avec le poste (âge, adresse, situation de famille, nationalité, santé…) sont masquées avant cet examen. Aucune note n'est attribuée et personne n'est écarté automatiquement : toutes les candidatures restent consultables et une personne de l'entreprise prend chaque décision. Les entretiens suivent les mêmes questions, liées au poste, pour toutes les personnes rencontrées.\n\nDestinataires : la direction de Négoce Durand ; l'éditeur du logiciel, en qualité de sous-traitant (art. 28 du RGPD), et son hébergeur dans l'Union européenne.\n\nDurée de conservation : au plus 24 mois après le dernier contact, puis suppression automatique. Si vous êtes recruté(e), votre dossier rejoint votre dossier du personnel.\n\nVos droits : accès, rectification, effacement, limitation, opposition. Vous pouvez les exercer à tout moment depuis le lien reçu avec l'accusé de réception, ou auprès du contact ci-dessus. Vous pouvez aussi saisir la CNIL (www.cnil.fr)."
+  "privacy": "Notice d'information — candidatures chez Négoce Durand\n\nResponsable du traitement : Négoce Durand, 12 rue des Artisans, 69100 Villeurbanne.\nContact pour vos données : contact@negoce-durand.example.\n\nFinalité : gérer le recrutement au poste auquel vous avez postulé (réception, examen, entretiens, réponse).\nBase légale : mesures précontractuelles prises à votre demande (art. 6.1.b du RGPD) et intérêt légitime de l'entreprise à recruter (art. 6.1.f).\n\nDonnées traitées : celles que vous transmettez, par le formulaire de candidature, par e-mail ou par message (identité, coordonnées, CV, message, réponses aux questions du poste), les échanges liés au recrutement, les notes de l'entreprise et les notes d'entretien.\nAucune donnée n'est collectée sur Internet à votre sujet (réseaux sociaux, moteurs de recherche). Vos données ne sont transmises à aucun service d'intelligence artificielle.\n\nMéthode de présélection (art. L1221-8 du Code du travail) : vos réponses aux questions du poste et votre CV sont comparés, critère par critère, aux exigences fixées par l'entreprise, selon des règles fixes et identiques pour tous. Les informations sans rapport avec le poste (âge, adresse, situation de famille, nationalité, santé…) sont masquées avant cet examen. Aucune note n'est attribuée et personne n'est écarté automatiquement : toutes les candidatures restent consultables et une personne de l'entreprise prend chaque décision. Les entretiens suivent les mêmes questions, liées au poste, pour toutes les personnes rencontrées.\n\nDestinataires : la direction de Négoce Durand ; l'éditeur du logiciel, en qualité de sous-traitant (art. 28 du RGPD), et son hébergeur dans l'Union européenne.\n\nDurée de conservation : au plus 24 mois après le dernier contact, puis suppression automatique. Si vous êtes recruté(e), votre dossier rejoint votre dossier du personnel.\n\nVos droits : accès, rectification, effacement, limitation, opposition. Vous pouvez les exercer à tout moment depuis le lien reçu avec l'accusé de réception, ou auprès du contact ci-dessus. Vous pouvez aussi saisir la CNIL (www.cnil.fr).",
+  "acknowledgment_received": [
+   "Candidature reçue : Assistant commercial / Assistante commerciale",
+   "Bonjour {prénom},\n\nNous avons bien reçu votre candidature au poste « Assistant commercial / Assistante commerciale ». Merci de votre intérêt.\n\nPour compléter votre candidature, merci de répondre à quelques questions sur le poste (2 minutes, CV facultatif si vous l'avez déjà envoyé) : {lien_questions}\n\nComment se passe la suite :\n- Négoce Durand examine toutes les candidatures et vous répondra, que la réponse soit positive ou non.\n- Si votre profil correspond, nous vous proposerons un entretien.\n\nCe que nous faisons de vos données :\n- Responsable du traitement : Négoce Durand. Finalité : examiner votre candidature à ce poste. Vos coordonnées et votre CV ont été enregistrés dans notre outil de recrutement à partir de votre envoi.\n- Vos réponses et votre CV sont comparés aux critères du poste selon des règles fixes, identiques pour tous ; les informations sans rapport avec le poste (âge, adresse, situation de famille…) sont masquées. Rien n'est décidé automatiquement : c'est une personne de l'entreprise qui décide.\n- Vos données sont conservées au plus 24 mois après notre dernier échange, puis supprimées automatiquement.\n- Vous pouvez consulter vos données, retirer votre candidature ou demander leur suppression à tout moment : {lien_donnees}\n- Notice complète et contact : {lien_notice}\n\nNégoce Durand"
+  ],
+  "complete_reminder": [
+   "Votre candidature au poste « Assistant commercial / Assistante commerciale » : une étape à finir",
+   "Bonjour {prénom},\n\nVotre candidature au poste « Assistant commercial / Assistante commerciale » est bien enregistrée. Il ne manque que vos réponses à quelques questions sur le poste (2 minutes) : {lien_questions}\n\nSi vous ne souhaitez plus donner suite, vous pouvez retirer votre candidature ici : {lien_donnees}\n\nNégoce Durand"
+  ]
  },
  "mail_templates": [
   {
@@ -1267,23 +1278,948 @@
    "features": []
   },
   "premium": {
-   "name": "Premium",
+   "name": "Pro",
    "limit": null,
    "features": [
+    "automations",
     "export",
+    "history",
     "scheduling"
+   ]
+  },
+  "agency": {
+   "name": "Agence",
+   "limit": null,
+   "features": [
+    "automations",
+    "export",
+    "history",
+    "priority_support",
+    "scheduling",
+    "team"
    ]
   }
  },
  "prices": {
-  "monthly": 49.0,
-  "yearly": 468.0,
-  "yearly_per_month": 39.0,
+  "monthly": 25.0,
+  "yearly": 240.0,
+  "yearly_per_month": 20.0,
   "currency": "EUR",
   "tax": "HT"
  },
+ "billing_plans": [
+  {
+   "id": "free",
+   "name": "Gratuit",
+   "monthly": 0,
+   "yearly": 0,
+   "yearly_per_month": 0,
+   "features": [],
+   "limit": 1
+  },
+  {
+   "id": "premium",
+   "name": "Pro",
+   "monthly": 25.0,
+   "yearly": 240.0,
+   "yearly_per_month": 20.0,
+   "features": [
+    "automations",
+    "export",
+    "history",
+    "scheduling"
+   ],
+   "limit": null
+  },
+  {
+   "id": "agency",
+   "name": "Agence",
+   "monthly": 79.0,
+   "yearly": 756.0,
+   "yearly_per_month": 63.0,
+   "features": [
+    "automations",
+    "export",
+    "history",
+    "priority_support",
+    "scheduling",
+    "team"
+   ],
+   "limit": null
+  }
+ ],
+ "pricing": {
+  "premium": {
+   "monthly": 25.0,
+   "yearly": 240.0,
+   "yearly_per_month": 20.0
+  },
+  "agency": {
+   "monthly": 79.0,
+   "yearly": 756.0,
+   "yearly_per_month": 63.0
+  }
+ },
  "features": {
-  "scheduling": "Les candidats choisissent eux-mêmes leur créneau d'entretien en ligne, avec relance automatique",
-  "export": "Export des candidatures (CSV)"
- }
+  "automations": "Automatisations : remerciement des refusés, relance des non-répondants, récapitulatif hebdomadaire",
+  "history": "Historique complet de chaque recrutement et de chaque candidat",
+  "scheduling": "Les candidats choisissent eux-mêmes leur créneau d'entretien en ligne",
+  "export": "Export des candidatures (CSV, s'ouvre dans Excel ou Google Sheets)",
+  "team": "Plusieurs utilisateurs dans le même espace",
+  "priority_support": "Support prioritaire"
+ },
+ "history_days_free": 30,
+ "assistant": {
+  "families": [
+   {
+    "pattern": "d[ée]velopp|programmeu|full ?stack|back ?end|front ?end|ing[ée]nieur logiciel|\\bdev\\b|devops",
+    "domain": "développement logiciel",
+    "missions": [
+     "Développer de nouvelles fonctionnalités et maintenir le code existant",
+     "Écrire des tests et participer aux revues de code",
+     "Corriger les anomalies remontées par les utilisateurs",
+     "Documenter les développements et échanger avec l'équipe produit"
+    ],
+    "criteria": [
+     [
+      "competence",
+      {
+       "skill": "Git",
+       "level": 2
+      }
+     ],
+     [
+      "langue",
+      {
+       "language": "Anglais",
+       "level": "B1"
+      }
+     ]
+    ],
+    "question": "Comment vérifiez-vous qu'une fonctionnalité est prête à être livrée ? Décrivez vos tests."
+   },
+   {
+    "pattern": "assistante? commercial|administration des ventes|\\badv\\b",
+    "domain": "administration des ventes",
+    "missions": [
+     "Établir les devis et suivre leur transformation",
+     "Saisir et suivre les commandes jusqu'à la livraison",
+     "Répondre aux clients par téléphone et par e-mail",
+     "Relancer les devis en attente"
+    ],
+    "criteria": [
+     [
+      "competence",
+      {
+       "skill": "Excel",
+       "level": 2
+      }
+     ]
+    ],
+    "question": "Comment priorisez-vous les demandes quand plusieurs clients attendent une réponse ?"
+   },
+   {
+    "pattern": "commercial|technico|business develop|charg[ée]e? d'affaires|attach[ée]e? commercial",
+    "domain": "vente",
+    "missions": [
+     "Prospecter de nouveaux clients sur le secteur",
+     "Présenter les offres et négocier les propositions",
+     "Suivre et fidéliser un portefeuille de clients",
+     "Rendre compte de l'activité commerciale"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Racontez une vente que vous avez conclue malgré une première objection du client."
+   },
+   {
+    "pattern": "vendeu|conseill[eè]re? de vente|employ[ée]e? (?:de|libre) (?:magasin|service)|caissi",
+    "domain": "vente en magasin",
+    "missions": [
+     "Accueillir et conseiller la clientèle",
+     "Mettre en rayon et entretenir l'espace de vente",
+     "Encaisser les achats",
+     "Participer aux inventaires"
+    ],
+    "criteria": [],
+    "question": "Comment conseillez-vous un client qui hésite entre deux produits ?"
+   },
+   {
+    "pattern": "serveu|chef de rang|barman|barmaid|runner|limonadi",
+    "domain": "service en salle",
+    "missions": [
+     "Accueillir les clients et les installer",
+     "Prendre les commandes et conseiller sur la carte",
+     "Servir les plats et les boissons",
+     "Encaisser et remettre la salle en ordre"
+    ],
+    "criteria": [],
+    "question": "Comment gérez-vous un coup de feu avec plusieurs tables qui attendent ?"
+   },
+   {
+    "pattern": "cuisini|commis de cuisine|chef de partie|chef de cuisine|second de cuisine|plongeu|pizzaiolo",
+    "domain": "cuisine",
+    "missions": [
+     "Préparer les plats selon les fiches techniques",
+     "Assurer la mise en place avant le service",
+     "Appliquer les règles d'hygiène et de traçabilité",
+     "Réceptionner et ranger les marchandises"
+    ],
+    "criteria": [
+     [
+      "habilitation",
+      {
+       "name": "Formation HACCP"
+      }
+     ]
+    ],
+    "question": "Comment organisez-vous votre mise en place avant un service chargé ?"
+   },
+   {
+    "pattern": "comptab|gestionnaire de paie|\\bpaie\\b|contr[ôo]leu?r de gestion",
+    "domain": "comptabilité",
+    "missions": [
+     "Saisir les écritures et rapprocher les comptes bancaires",
+     "Suivre les règlements clients et fournisseurs",
+     "Préparer les déclarations de TVA",
+     "Participer à la clôture des comptes"
+    ],
+    "criteria": [
+     [
+      "competence",
+      {
+       "skill": "Excel",
+       "level": 2
+      }
+     ]
+    ],
+    "question": "Comment procédez-vous pour lettrer un compte fournisseur qui présente des écarts ?"
+   },
+   {
+    "pattern": "secr[ée]taire|assistante? (?:administrati|de direction)|office manager|standardiste|r[ée]ceptionniste|agent d'accueil|h[ôo]tes?s?e? d'accueil",
+    "domain": "assistanat administratif",
+    "missions": [
+     "Accueillir les visiteurs et répondre au téléphone",
+     "Gérer le courrier, les agendas et les rendez-vous",
+     "Rédiger et mettre en forme des documents",
+     "Classer et archiver les dossiers"
+    ],
+    "criteria": [
+     [
+      "competence",
+      {
+       "skill": "Word",
+       "level": 2
+      }
+     ]
+    ],
+    "question": "Comment organisez-vous plusieurs agendas quand les demandes se chevauchent ?"
+   },
+   {
+    "pattern": "[ée]lectricien",
+    "domain": "électricité du bâtiment",
+    "missions": [
+     "Installer et raccorder les équipements électriques",
+     "Lire les plans et schémas électriques",
+     "Mettre en service et contrôler les installations",
+     "Diagnostiquer et réparer les pannes"
+    ],
+    "criteria": [
+     [
+      "habilitation",
+      {
+       "name": "Habilitation électrique"
+      }
+     ],
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Comment diagnostiquez-vous un disjoncteur qui saute de façon intermittente ?"
+   },
+   {
+    "pattern": "plombi|chauffagiste|frigoriste|climaticien",
+    "domain": "plomberie et chauffage",
+    "missions": [
+     "Installer les réseaux d'eau et les équipements sanitaires",
+     "Poser et raccorder les appareils de chauffage",
+     "Diagnostiquer et réparer les fuites et les pannes",
+     "Conseiller les clients sur l'entretien"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Comment intervenez-vous sur une fuite dont l'origine n'est pas visible ?"
+   },
+   {
+    "pattern": "ma[çc]on|carreleu|plaquiste|peintre|couvreu|menuisi|charpenti|ouvri[eè]re? du b[âa]timent|chef de chantier",
+    "domain": "bâtiment",
+    "missions": [
+     "Préparer le chantier et les matériaux",
+     "Réaliser les travaux selon les plans et les règles de l'art",
+     "Respecter les consignes de sécurité du chantier",
+     "Nettoyer et ranger le chantier en fin de journée"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Comment vérifiez-vous la qualité de votre travail avant de passer à l'étape suivante d'un chantier ?"
+   },
+   {
+    "pattern": "magasini|pr[ée]parat(?:eur|rice) de commandes|cariste|logisti|manutentionnai",
+    "domain": "logistique",
+    "missions": [
+     "Réceptionner et contrôler les marchandises",
+     "Préparer les commandes selon les bons de préparation",
+     "Ranger le stock et participer aux inventaires",
+     "Charger et décharger les véhicules"
+    ],
+    "criteria": [
+     [
+      "habilitation",
+      {
+       "name": "CACES R489"
+      }
+     ]
+    ],
+    "question": "Comment évitez-vous les erreurs de préparation quand le volume de commandes augmente ?"
+   },
+   {
+    "pattern": "chauffeu|livreu|conduct(?:eur|rice)|coursi",
+    "domain": "transport et livraison",
+    "missions": [
+     "Charger le véhicule et vérifier les documents de livraison",
+     "Livrer les clients en respectant les horaires",
+     "Contrôler l'état du véhicule avant le départ",
+     "Faire signer les bons de livraison"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Comment réorganisez-vous une tournée quand une livraison urgente s'ajoute en cours de route ?"
+   },
+   {
+    "pattern": "aide (?:à|a) domicile|auxiliaire de vie|aide m[ée]nag|aide[- ]soignan",
+    "domain": "aide à la personne",
+    "missions": [
+     "Accompagner les personnes dans les gestes du quotidien",
+     "Entretenir le logement et le linge",
+     "Préparer les repas",
+     "Signaler tout changement de situation à l'équipe"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Comment réagissez-vous si la personne que vous accompagnez refuse une aide prévue ?"
+   },
+   {
+    "pattern": "agent(?:e)? d'entretien|agent(?:e)? de propret|nettoyage|m[ée]nage",
+    "domain": "propreté",
+    "missions": [
+     "Nettoyer et désinfecter les locaux",
+     "Utiliser les produits et le matériel selon les consignes",
+     "Trier les déchets",
+     "Signaler les anomalies constatées"
+    ],
+    "criteria": [],
+    "question": "Comment organisez-vous votre passage quand les locaux sont occupés ?"
+   },
+   {
+    "pattern": "technicien|m[ée]canicien|maintenance|d[ée]panneu",
+    "domain": "maintenance",
+    "missions": [
+     "Assurer la maintenance préventive des équipements",
+     "Diagnostiquer et réparer les pannes",
+     "Tenir à jour les fiches d'intervention",
+     "Proposer des améliorations contre les pannes récurrentes"
+    ],
+    "criteria": [
+     [
+      "permis",
+      {
+       "category": "B"
+      }
+     ]
+    ],
+    "question": "Décrivez votre méthode pour diagnostiquer une panne que vous n'avez jamais rencontrée."
+   },
+   {
+    "pattern": "community manager|communication|marketing|chef de projet digital|graphiste|webmaster",
+    "domain": "communication",
+    "missions": [
+     "Animer les réseaux sociaux de l'entreprise",
+     "Rédiger les contenus (site, lettre d'information, publications)",
+     "Suivre les statistiques et proposer des améliorations",
+     "Coordonner les actions avec les prestataires"
+    ],
+    "criteria": [
+     [
+      "competence",
+      {
+       "skill": "Canva",
+       "level": 2
+      }
+     ]
+    ],
+    "question": "Quelle publication avez-vous conçue qui a bien fonctionné, et pourquoi selon vous ?"
+   },
+   {
+    "pattern": "charg[ée]e? de client|conseill[eè]re? client|t[ée]l[ée]conseill|service client|relation client",
+    "domain": "relation client",
+    "missions": [
+     "Répondre aux demandes des clients par téléphone et par e-mail",
+     "Traiter les réclamations jusqu'à leur résolution",
+     "Mettre à jour les dossiers clients",
+     "Remonter les demandes récurrentes à l'équipe"
+    ],
+    "criteria": [],
+    "question": "Comment traitez-vous la réclamation d'un client mécontent qui a déjà appelé plusieurs fois ?"
+   },
+   {
+    "pattern": "coiffeu|esth[ée]ticien|prothésiste ongulaire|barbier",
+    "domain": "coiffure et esthétique",
+    "missions": [
+     "Accueillir la clientèle et conseiller les prestations",
+     "Réaliser les prestations de la carte",
+     "Vendre les produits de soin",
+     "Entretenir le salon et le matériel"
+    ],
+    "criteria": [
+     [
+      "diplome",
+      {
+       "level": 3,
+       "domain": "coiffure ou esthétique"
+      }
+     ]
+    ],
+    "question": "Comment conseillez-vous une cliente ou un client qui ne sait pas ce qu'il veut ?"
+   },
+   {
+    "pattern": "boulang|p[âa]tissi|chocolati|boucher|charcuti|traiteur",
+    "domain": "métiers de bouche",
+    "missions": [
+     "Préparer les produits selon les recettes de la maison",
+     "Organiser la production selon les commandes",
+     "Appliquer les règles d'hygiène et de traçabilité",
+     "Entretenir le laboratoire et le matériel"
+    ],
+    "criteria": [
+     [
+      "diplome",
+      {
+       "level": 3,
+       "domain": "métiers de bouche"
+      }
+     ]
+    ],
+    "question": "Comment organisez-vous la production quand une grosse commande arrive au dernier moment ?"
+   }
+  ],
+  "software": {
+   "excel": "Excel",
+   "word": "Word",
+   "powerpoint": "PowerPoint",
+   "outlook": "Outlook",
+   "sage": "Sage",
+   "sap": "SAP",
+   "ebp": "EBP",
+   "cegid": "Cegid",
+   "quickbooks": "QuickBooks",
+   "pennylane": "Pennylane",
+   "python": "Python",
+   "java": "Java",
+   "javascript": "JavaScript",
+   "typescript": "TypeScript",
+   "react": "React",
+   "angular": "Angular",
+   "vue": "Vue.js",
+   "vuejs": "Vue.js",
+   "node": "Node.js",
+   "nodejs": "Node.js",
+   "php": "PHP",
+   "symfony": "Symfony",
+   "laravel": "Laravel",
+   "django": "Django",
+   "flask": "Flask",
+   "fastapi": "FastAPI",
+   "sql": "SQL",
+   "postgresql": "PostgreSQL",
+   "mysql": "MySQL",
+   "docker": "Docker",
+   "kubernetes": "Kubernetes",
+   "aws": "AWS",
+   "azure": "Azure",
+   "git": "Git",
+   "linux": "Linux",
+   "c#": "C#",
+   ".net": ".NET",
+   "dotnet": ".NET",
+   "c++": "C++",
+   "golang": "Go",
+   "rust": "Rust",
+   "ruby": "Ruby",
+   "rails": "Ruby on Rails",
+   "kotlin": "Kotlin",
+   "swift": "Swift",
+   "flutter": "Flutter",
+   "autocad": "AutoCAD",
+   "revit": "Revit",
+   "solidworks": "SolidWorks",
+   "sketchup": "SketchUp",
+   "photoshop": "Photoshop",
+   "illustrator": "Illustrator",
+   "indesign": "InDesign",
+   "figma": "Figma",
+   "canva": "Canva",
+   "wordpress": "WordPress",
+   "shopify": "Shopify",
+   "salesforce": "Salesforce",
+   "hubspot": "HubSpot",
+   "power bi": "Power BI",
+   "powerbi": "Power BI",
+   "tableau": "Tableau",
+   "odoo": "Odoo"
+  },
+  "lang_words": {
+   "anglais": "Anglais",
+   "espagnol": "Espagnol",
+   "allemand": "Allemand",
+   "italien": "Italien",
+   "portugais": "Portugais",
+   "arabe": "Arabe",
+   "chinois": "Chinois (mandarin)",
+   "neerlandais": "Néerlandais",
+   "russe": "Russe",
+   "polonais": "Polonais",
+   "roumain": "Roumain",
+   "turc": "Turc",
+   "japonais": "Japonais"
+  },
+  "lang_levels": {
+   "notions": "A2",
+   "scolaire": "A2",
+   "courant": "B2",
+   "professionnel": "B2",
+   "bilingue": "C1",
+   "natif": "C1",
+   "maternelle": "C1",
+   "operationnel": "B1",
+   "technique": "B1"
+  },
+  "seniority": {
+   "junior": 1,
+   "débutant": 0,
+   "debutant": 0,
+   "débutante": 0,
+   "debutante": 0,
+   "confirmé": 3,
+   "confirme": 3,
+   "confirmée": 3,
+   "confirmee": 3,
+   "expérimenté": 5,
+   "experimente": 5,
+   "expérimentée": 5,
+   "experimentee": 5,
+   "senior": 5
+  },
+  "abbreviations": {
+   "dev": "Développeur",
+   "devs": "Développeur",
+   "developpeur": "Développeur",
+   "dév": "Développeur",
+   "comm": "Commercial",
+   "compta": "Comptable",
+   "assist": "Assistant",
+   "tech": "Technicien",
+   "adv": "ADV",
+   "rh": "RH",
+   "ia": "IA"
+  },
+  "diplomas": [
+   [
+    "\\bdoctorat\\b|\\bphd\\b",
+    8
+   ],
+   [
+    "\\bbac\\s*\\+\\s*5\\b|\\bmaster\\b|\\bdipl[ôo]me d'ing[ée]nieur\\b|\\bmba\\b",
+    7
+   ],
+   [
+    "\\bbac\\s*\\+\\s*3\\b|\\blicence\\b|\\bbachelor\\b",
+    6
+   ],
+   [
+    "\\bbac\\s*\\+\\s*2\\b|\\bbts\\b|\\bdut\\b",
+    5
+   ],
+   [
+    "\\bbac(?:calaur[ée]at)?\\b(?!\\s*\\+)|\\bbac pro\\b",
+    4
+   ],
+   [
+    "\\bcap\\b(?!\\s+sur)|\\bbep\\b",
+    3
+   ]
+  ],
+  "habilitations": [
+   [
+    "\\bcaces\\b(?:\\s*(r\\s*\\d{3}))?(?:\\s*(?:cat[ée]gorie|cat\\.?)?\\s*(\\d[a-z]?)\\b)?",
+    null
+   ],
+   [
+    "\\bhabilitations?\\s+[ée]lectriques?\\b",
+    "Habilitation électrique"
+   ],
+   [
+    "\\bsst\\b|\\bsauveteur secouriste\\b",
+    "Sauveteur secouriste du travail (SST)"
+   ],
+   [
+    "\\bhaccp\\b",
+    "Formation HACCP"
+   ],
+   [
+    "\\bfimo\\b",
+    "FIMO"
+   ],
+   [
+    "\\bfco\\b",
+    "FCO"
+   ],
+   [
+    "\\bssiap\\s*1?\\b",
+    "SSIAP 1"
+   ],
+   [
+    "\\bcqp aps\\b|\\bcarte professionnelle\\b",
+    "Carte professionnelle (CNAPS)"
+   ]
+  ],
+  "contract_words": [
+   [
+    "\\bcdi\\b",
+    "CDI"
+   ],
+   [
+    "\\bcdd\\b",
+    "CDD"
+   ],
+   [
+    "\\bint[ée]rim(?:aire)?\\b",
+    "Intérim"
+   ],
+   [
+    "\\balternance\\b|\\bapprenti(?:ssage)?\\b|\\bcontrat pro(?:fessionnalisation)?\\b",
+    "Alternance"
+   ],
+   [
+    "\\bstage\\b|\\bstagiaire\\b",
+    "Stage"
+   ],
+   [
+    "\\bsaisonni(?:er|ère|ere)\\b|\\bsaison\\b",
+    "Saisonnier"
+   ],
+   [
+    "\\bfreelance\\b|\\bind[ée]pendant\\b|\\bauto-?entrepreneur\\b",
+    "Indépendant"
+   ]
+  ],
+  "title_cut": "\\b(?:cdi|cdd|int[ée]rim|alternance|apprentissage|stage|freelance|caces|permis|habilitation|bac|anglais|espagnol|allemand|t[ée]l[ée]travail|temps partiel|temps plein|mi-temps|d[ée]butant|exp[ée]riment|confirm|junior|senior)\\b.*$",
+  "examples": {
+   "Dev Python junior, 3 ans, Lyon, 2500-3000 €": [
+    {
+     "missions": [
+      "Développer de nouvelles fonctionnalités et maintenir le code existant",
+      "Écrire des tests et participer aux revues de code",
+      "Corriger les anomalies remontées par les utilisateurs",
+      "Documenter les développements et échanger avec l'équipe produit"
+     ],
+     "criteria": [
+      {
+       "kind": "experience",
+       "required": true,
+       "params": {
+        "years": 3,
+        "domain": "développement logiciel"
+       }
+      },
+      {
+       "kind": "competence",
+       "required": true,
+       "params": {
+        "skill": "Python",
+        "level": 2
+       }
+      },
+      {
+       "kind": "competence",
+       "required": false,
+       "params": {
+        "skill": "Git",
+        "level": 2
+       }
+      },
+      {
+       "kind": "langue",
+       "required": false,
+       "params": {
+        "language": "Anglais",
+        "level": "B1"
+       }
+      }
+     ],
+     "benefits": [],
+     "questions": [
+      "Décrivez une réalisation récente où vous avez utilisé Python : le contexte, votre rôle et le résultat.",
+      "Comment vérifiez-vous qu'une fonctionnalité est prête à être livrée ? Décrivez vos tests.",
+      "Comment vous y prenez-vous pour « développer de nouvelles fonctionnalités et maintenir le code existant » ? Donnez un exemple concret."
+     ],
+     "remote": "non",
+     "salary_min": 2500.0,
+     "salary_max": 3000.0,
+     "salary_period": "mois",
+     "contract": "CDI",
+     "title": "Développeur Python",
+     "_explicit": 2,
+     "location": "Lyon",
+     "summary": "Nous recherchons une personne pour le poste de Développeur Python à Lyon, en CDI. Au quotidien : développer de nouvelles fonctionnalités et maintenir le code existant ; écrire des tests et participer aux revues de code ; corriger les anomalies remontées par les utilisateurs."
+    },
+    [
+     "Type de contrat non précisé : CDI proposé par défaut."
+    ]
+   ],
+   "Serveur en CDD 6 mois à Annecy, 1 900 € brut, week-ends": [
+    {
+     "missions": [
+      "Accueillir les clients et les installer",
+      "Prendre les commandes et conseiller sur la carte",
+      "Servir les plats et les boissons",
+      "Encaisser et remettre la salle en ordre"
+     ],
+     "criteria": [
+      {
+       "kind": "experience",
+       "required": false,
+       "params": {
+        "years": 1,
+        "domain": "service en salle"
+       }
+      }
+     ],
+     "benefits": [],
+     "questions": [
+      "Comment gérez-vous un coup de feu avec plusieurs tables qui attendent ?",
+      "Comment vous y prenez-vous pour « accueillir les clients et les installer » ? Donnez un exemple concret.",
+      "Quelle situation difficile avez-vous rencontrée en service en salle, et comment l'avez-vous résolue ?"
+     ],
+     "remote": "non",
+     "salary_min": 1900.0,
+     "salary_max": 1900.0,
+     "salary_period": "mois",
+     "contract": "CDD",
+     "contract_duration": "6 mois",
+     "hours": "Travail le week-end",
+     "title": "Serveur",
+     "rome_code": "G1803",
+     "rome_label": "Serveur / Serveuse en restauration",
+     "_explicit": 0,
+     "location": "Annecy",
+     "summary": "Nous recherchons une personne pour le poste de Serveur à Annecy, en CDD (6 mois). Au quotidien : accueillir les clients et les installer ; prendre les commandes et conseiller sur la carte ; servir les plats et les boissons."
+    },
+    []
+   ],
+   "Assistant commercial ADV, 2 ans, Excel, Villeurbanne, 2 100 à 2 400 € par mois": [
+    {
+     "missions": [
+      "Établir les devis et suivre leur transformation",
+      "Saisir et suivre les commandes jusqu'à la livraison",
+      "Répondre aux clients par téléphone et par e-mail",
+      "Relancer les devis en attente"
+     ],
+     "criteria": [
+      {
+       "kind": "experience",
+       "required": true,
+       "params": {
+        "years": 2,
+        "domain": "administration des ventes"
+       }
+      },
+      {
+       "kind": "competence",
+       "required": true,
+       "params": {
+        "skill": "Excel",
+        "level": 2
+       }
+      }
+     ],
+     "benefits": [],
+     "questions": [
+      "Décrivez une réalisation récente où vous avez utilisé Excel : le contexte, votre rôle et le résultat.",
+      "Comment priorisez-vous les demandes quand plusieurs clients attendent une réponse ?",
+      "Comment vous y prenez-vous pour « établir les devis et suivre leur transformation » ? Donnez un exemple concret."
+     ],
+     "remote": "non",
+     "salary_min": 2100.0,
+     "salary_max": 2400.0,
+     "salary_period": "mois",
+     "contract": "CDI",
+     "title": "Assistant commercial ADV",
+     "_explicit": 2,
+     "location": "Villeurbanne",
+     "summary": "Nous recherchons une personne pour le poste d'Assistant commercial ADV à Villeurbanne, en CDI. Au quotidien : établir les devis et suivre leur transformation ; saisir et suivre les commandes jusqu'à la livraison ; répondre aux clients par téléphone et par e-mail."
+    },
+    [
+     "Type de contrat non précisé : CDI proposé par défaut."
+    ]
+   ],
+   "Électricien bâtiment confirmé, CDI, Nantes, 32-36 k€, habilitation électrique": [
+    {
+     "missions": [
+      "Installer et raccorder les équipements électriques",
+      "Lire les plans et schémas électriques",
+      "Mettre en service et contrôler les installations",
+      "Diagnostiquer et réparer les pannes"
+     ],
+     "criteria": [
+      {
+       "kind": "experience",
+       "required": true,
+       "params": {
+        "years": 3,
+        "domain": "électricité du bâtiment"
+       }
+      },
+      {
+       "kind": "habilitation",
+       "required": true,
+       "params": {
+        "name": "Habilitation électrique"
+       }
+      },
+      {
+       "kind": "permis",
+       "required": false,
+       "params": {
+        "category": "B"
+       }
+      }
+     ],
+     "benefits": [],
+     "questions": [
+      "Comment diagnostiquez-vous un disjoncteur qui saute de façon intermittente ?",
+      "Comment vous y prenez-vous pour « installer et raccorder les équipements électriques » ? Donnez un exemple concret.",
+      "Quelle situation difficile avez-vous rencontrée en électricité du bâtiment, et comment l'avez-vous résolue ?"
+     ],
+     "remote": "non",
+     "salary_min": 32000.0,
+     "salary_max": 36000.0,
+     "salary_period": "an",
+     "contract": "CDI",
+     "title": "Électricien bâtiment",
+     "rome_code": "F1602",
+     "rome_label": "Electricien / Electricienne du bâtiment",
+     "_explicit": 2,
+     "location": "Nantes",
+     "summary": "Nous recherchons une personne pour le poste d'Électricien bâtiment à Nantes, en CDI. Au quotidien : installer et raccorder les équipements électriques ; lire les plans et schémas électriques ; mettre en service et contrôler les installations."
+    },
+    []
+   ]
+  }
+ },
+ "manual_channels": [
+  {
+   "id": "linkedin",
+   "label": "LinkedIn",
+   "url": "https://business.linkedin.com/fr/fr/hire/post-jobs",
+   "hint": "Publiez l'offre dans l'espace Emplois de la page de l'entreprise, ou partagez ce texte en publication."
+  },
+  {
+   "id": "indeed",
+   "label": "Indeed",
+   "url": "https://fr.indeed.com/recrutement",
+   "hint": "Créez l'annonce depuis votre compte employeur Indeed et collez la description."
+  },
+  {
+   "id": "france_travail",
+   "label": "France Travail",
+   "url": "https://www.francetravail.fr/employeur/",
+   "hint": "Déposez l'offre depuis votre espace recruteur France Travail et collez la description."
+  },
+  {
+   "id": "local",
+   "label": "Relais locaux",
+   "url": "",
+   "hint": "Groupes Facebook de la ville, mairie, école, panneau du magasin, bouche-à-oreille."
+  }
+ ],
+ "question_guardrails": [
+  [
+   "\\b(enfants?|mari[ée]?|conjoint|c[ée]libataire|votre famille|vie familiale|situation familiale|en couple|grossesse|enceinte|b[ée]b[ée])\\b",
+   "Vie privée / famille"
+  ],
+  [
+   "\\b(sant[ée]|maladie|malade|handicap|m[ée]dical|traitement|arr[eê]ts? maladie)\\b",
+   "Santé / handicap"
+  ],
+  [
+   "\\b(religion|religieu|croyant|pratiquant|confession|f[eê]tes religieuses|ramadan|pri[eè]re)\\b",
+   "Convictions religieuses"
+  ],
+  [
+   "\\b(origine|nationalit[ée]|n[ée]e? o[uù]|pays d['’]origine|parents viennent)\\b",
+   "Origine / nationalité"
+  ],
+  [
+   "\\b(quel [âa]ge|votre [âa]ge|ann[ée]e de naissance|retraite)\\b",
+   "Âge"
+  ],
+  [
+   "\\b(o[uù] habitez|habitez-vous|votre adresse|lieu de r[ée]sidence|d[ée]m[ée]nag)\\b",
+   "Lieu de résidence"
+  ],
+  [
+   "\\b(syndicat|syndiqu|gr[eè]ve|opinions? politiques?|vote|parti politique)\\b",
+   "Opinions / activité syndicale"
+  ],
+  [
+   "\\b(salaire (actuel|pr[ée]c[ée]dent|ant[ée]rieur)|combien gagn|r[ée]mun[ée]ration (actuelle|ant[ée]rieure)|dernier salaire)\\b",
+   "Rémunération antérieure"
+  ],
+  [
+   "\\b(projets? personnels?|vie personnelle|vie priv[ée]e|loisirs|temps libre)\\b",
+   "Vie privée"
+  ]
+ ]
 }

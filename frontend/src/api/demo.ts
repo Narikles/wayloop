@@ -12,11 +12,13 @@
 import { SOURCE_LABELS, STAGE } from "../lib/format";
 import type { Api } from "./client";
 import { ApiError } from "./client";
+import { parseBrief } from "./demo-assistant";
 import FX from "./demo-fixtures.json";
 import ROME from "./demo-rome.json";
 import type {
-  Agenda, ApplicationDetail, AuditItem, Billing, Comparison, Counts, Criterion, DebriefNote, Evaluation, GridQuestion, InterviewItem,
-  Issue, JobForm, Me, Offer, PageId, Profile, Proposal, RecruitmentDetail, RecruitmentSummary, ScreeningQuestion, SentMessage, Slot,
+  Agenda, ApplicationDetail, AuditItem, Automations, Billing, CandidateNote, Comparison, Counts, Criterion, DebriefNote, DiffusionChannel,
+  Evaluation, GridQuestion, InterviewItem, Issue, JobForm, Me, Offer, PageId, PipelineStage, PlanId, Profile, Proposal, RecruitmentDetail,
+  RecruitmentSummary, ScreeningQuestion, SentMessage, Slot, TeamMember, TimelineItem,
 } from "./types";
 
 const fx = FX as any;
@@ -44,9 +46,23 @@ const LABELS: Record<string, string> = {
   "interview.cancelled": "Date d'entretien retirée", "interview.attendance": "Présence à l'entretien", "debrief.validated": "Notes d'entretien enregistrées",
   "decision.made": "Décision prise", "message.sent": "E-mail envoyé", "message.bulk_sent": "E-mail groupé envoyé",
   "application.rejected": "Réponse envoyée en cours de processus", "billing.plan_changed": "Changement d'offre", "export.csv": "Export des candidatures",
+  "offer.drafted": "Brouillon d'offre préparé par l'assistant", "application.added": "Candidature ajoutée à la main",
+  "application.completed": "Questions du poste remplies par le candidat", "application.rejection_cancelled": "Refus annulé avant l'envoi",
+  "note.added": "Note ajoutée", "diffusion.marked": "Diffusion mise à jour", "automations.updated": "Automatisations modifiées",
+  "team.invited": "Membre invité dans l'équipe", "team.removed": "Membre retiré de l'équipe",
 };
+const TIMELINE: Record<string, string> = {
+  "application.received": "Candidature reçue", "application.added": "Ajoutée à la main", "application.completed": "Questions du poste remplies par le candidat",
+  "screening.grouped": "Synthèse établie", "shortlist.candidate_added": "Ajoutée à la sélection", "shortlist.candidate_removed": "Retirée de la sélection",
+  "interview.invited": "Invitée en entretien", "interview.booked": "Date d'entretien confirmée", "interview.cancelled": "Date d'entretien retirée",
+  "interview.attendance": "Présence à l'entretien notée", "debrief.validated": "Notes d'entretien enregistrées", "application.rejected": "Classée « Refusé »",
+  "application.rejection_cancelled": "Refus annulé", "note.added": "Note ajoutée",
+};
+const GUARDS: [RegExp, string][] = (FX as any).question_guardrails.map(([p, l]: [string, string]) => [new RegExp(p), l]);
+const questionViolation = (text: string) => GUARDS.find(([r]) => r.test(norm(text)))?.[1] || null;
+const DEMO_REJECT_DELAY_MS = 45_000; // démo : le remerciement part 45 s après le refus (1 h en production)
 const MESSAGE_KINDS: Record<string, string> = {
-  acknowledgment: "Accusé de réception", invitation: "Invitation à un entretien", booking_confirmation: "Entretien confirmé",
+  acknowledgment: "Accusé de réception", "relance:questions": "Relance : questions du poste à remplir", invitation: "Invitation à un entretien", booking_confirmation: "Entretien confirmé",
   reminder: "Rappel d'entretien", unscheduled: "Entretien à déplacer", bulk: "Message", "closing:hired": "Réponse positive",
   "closing:rejected": "Réponse négative", "closing:rejected_interviewed": "Réponse négative après entretien",
 };
@@ -270,12 +286,22 @@ function buildProfile(form: JobForm): { profile: Profile & Record<string, any>; 
   const remote = ({ non: null, partiel: "Télétravail partiel possible", total: "Poste en télétravail" } as Record<string, string | null>)[form.remote || "non"] ?? null;
   const missions = (form.missions || []).map((m, i) => textField(m, `missions.${i}`, 240)).filter(Boolean).slice(0, 8);
   const benefits = (form.benefits || []).map((b, i) => textField(b, `benefits.${i}`, 120)).filter(Boolean).slice(0, 6);
+  const questions: { id: string; text: string }[] = [];
+  (form.questions || []).slice(0, 3).forEach((q, i) => {
+    const t = textField(q, `questions.${i}`, 300);
+    if (!t) return;
+    const topic = questionViolation(t);
+    if (topic) return issues.push({ field: `questions.${i}`, rule: "question_topic", match: t.slice(0, 80), message: `Question sans lien avec le poste (${topic.toLowerCase()}) : elle ne peut pas être posée.` });
+    questions.push({ id: `q${questions.length + 1}`, text: t });
+  });
   const profile = {
     title, rome_code: clean(form.rome_code, 5) || null, rome_label: clean(form.rome_label, 140) || null, missions, criteria, salary,
     hours: textField(form.hours, "hours", 120) || null, location: clean(form.location, 160) || null,
     location_citycode: clean(form.location_citycode, 10) || null,
     contract: (contract && duration ? `${contract} (${duration})` : contract) || null, start_date: clean(form.start_date, 60) || null,
     remote, company_pitch: textField(form.company_pitch, "company_pitch", 600) || null, benefits,
+    summary: textField(form.summary, "summary", 900) || null, questions,
+    assisted: form.assisted && ["ia", "regles"].includes(form.assisted.engine) ? { engine: form.assisted.engine, model: form.assisted.model || null } : null,
   };
   return { profile, issues };
 }
@@ -295,6 +321,7 @@ function offerFromProfile(p: Profile, company: string): { short: string; long: s
   if (p.hours) short += ` Horaires : ${p.hours}.`;
   short += " Réponse assurée à chaque candidature.";
   const lines = [title, "", p.company_pitch || `${company} recrute.`, ""];
+  if (p.summary) lines.push("Le poste", p.summary, "");
   if (missions.length) lines.push("Vos missions", ...missions.map((m) => `- ${m}`), "");
   if (req.length || nice.length) lines.push("Votre profil", ...req.map((r) => `- Indispensable : ${r}`), ...nice.map((n) => `- Apprécié : ${n}`), "");
   lines.push("Conditions");
@@ -324,7 +351,7 @@ function questionsFor(p: Profile): ScreeningQuestion[] {
     if (k === "langue") return { ...base, label: `Quel est votre niveau en ${String(q.language).toLowerCase()} ?`, input: "select", options: LANGUAGE_ANSWERS.map(([value, label]) => ({ value, label })), help: "A1-A2 : notions · B1-B2 : courant · C1-C2 : très bonne maîtrise" };
     if (k === "habilitation") return { ...base, label: `Avez-vous « ${q.name} » en cours de validité ?`, input: "yesno" };
     return { ...base, label: q.text || c.label, input: "text", max: 500 };
-  }) as ScreeningQuestion[];
+  }).concat((p.questions || []).map((fq) => ({ id: fq.id, kind: "question", required: true, label: fq.text, input: "text", max: 500 }))) as ScreeningQuestion[];
 }
 
 function cleanAnswers(p: Profile, raw: Record<string, any>): Record<string, any> {
@@ -387,6 +414,9 @@ function declaredEval(c: Criterion, answers: Record<string, any> | null): Evalua
   return { ...base, status, declared, evidence: "declared",
     justification: status === "met" || status === "partial" ? "Déclaré par le candidat, non retrouvé dans le CV : à vérifier en entretien." : "Selon la réponse du candidat." };
 }
+
+/** Même règle que le serveur (cv_text.is_readable) : au moins 25 mots de 3 lettres ou plus. */
+const isReadable = (t?: string | null) => (t?.match(/[A-Za-zÀ-ÿ]{3,}/g) || []).length >= 25;
 
 function computeGroup(evals: Evaluation[]): string {
   const req = evals.filter((e) => e.required);
@@ -470,30 +500,38 @@ const frDateTime = (iso: string) => {
 };
 
 /* --- État de la démo ------------------------------------------------------------------ */
-type DApp = ApplicationDetail & { cand_token: string; raw: Record<string, any> | null; fxi: any | null; order: number; sent: SentMessage[] };
+type DApp = ApplicationDetail & {
+  cand_token: string; raw: Record<string, any> | null; fxi: any | null; order: number; sent: SentMessage[];
+  noteList: CandidateNote[]; before_rejection: string | null; subject_tpl?: string; body_tpl?: string;
+};
 type DIv = InterviewItem & { token: string };
 type Rec = {
   id: string; title: string; state: string; created_at: string; published_at: string | null; closed_at: string | null; shortlisted_at: string | null;
   profile: Profile; proposals: Proposal[]; offers: Offer[]; grid: RecruitmentDetail["grid"]; apps: DApp[];
   slots: (Slot & { iv: string | null })[]; ivs: DIv[]; outcome: string | null; seconds: number;
   location: string; interview_minutes: number; audit: AuditItem[]; token: string;
+  posted: Record<string, { status: string; at: string }>;
 };
 
 export function createDemoApi(): Api {
   const recs: Rec[] = [];
   let auditId = 0;
-  let plan: "free" | "premium" = "free";
+  let plan: PlanId = "free";
   let interval: "month" | "year" = "year";
+  const automations = { auto_reject: true, relance: true, relance_days: 3, weekly_recap: true, notify_new: true };
+  const team: TeamMember[] = [];
   const t = () => Date.now();
   const company = { id: "c1", name: fx.company.name, slug: fx.company.slug, address: fx.company.address,
     headcount: 18, siren: fx.company.siren, naf_code: fx.company.naf_code, headcount_range: fx.company.headcount_range };
   const user = { id: "u1", email: "paul@negoce-durand.example", name: "Paul Durand", phone: "", role: "owner", theme: "light" as "light" | "dark" };
-  const has = (f: string) => plan === "premium" && fx.plans.premium.features.includes(f);
-  const requireFeature = (f: string) => { if (!has(f)) throw new ApiError(402, `Fonctionnalité incluse dans Premium : ${fx.features[f]}.`, true); };
+  const has = (f: string) => plan !== "free" && fx.plans[plan].features.includes(f);
+  const requireFeature = (f: string) => {
+    if (!has(f)) throw new ApiError(402, `Inclus dans l'offre ${fx.plans.premium.features.includes(f) ? "Pro" : "Agence"} : ${fx.features[f][0].toLowerCase()}${fx.features[f].slice(1)}.`, true);
+  };
   const active = () => recs.filter((r) => !["closed", "abandoned"].includes(r.state)).length;
   const me = (): Me => ({
     ...clone(user), company: clone(company),
-    app: { name: "WayLoop", demo_mode: true, environment: "demo" },
+    app: { name: "WayLoop", demo_mode: true, environment: "demo", ai_assistant: false, inbound_email: true },
     plan: { id: plan, name: fx.plans[plan].name, features: [...fx.plans[plan].features], active_recruitments_limit: fx.plans[plan].limit },
   });
 
@@ -564,22 +602,66 @@ export function createDemoApi(): Api {
   const sameAsExample = (r: Rec) => critSig(r.profile.criteria) === FX_SIG;
 
   /* Candidatures */
-  const receive = (r: Rec, d: { name: string; email: string; source: string; message?: string | null; cv_filename?: string | null;
-    cv_text?: string | null; pool_consent?: boolean; raw: Record<string, any> | null; fxi?: any }) => {
+  const receive = (r: Rec, d: { name: string; email: string | null; source: string; message?: string | null; cv_filename?: string | null;
+    cv_text?: string | null; pool_consent?: boolean; raw: Record<string, any> | null; fxi?: any; manual?: boolean; phone?: string | null;
+    ack?: boolean; note?: string | null }) => {
     const a: DApp = {
       id: uid("a"), name: d.name, source: d.source, status: "received", group: null, shortlisted: false, rescued: false,
       created_at: now(), screened: false, has_cv: !!d.cv_filename, pool_consent: !!d.pool_consent, anonymized: false,
-      evaluations: [], interview: null, debrief_status: null, email: d.email, phone: null, message: d.message || null,
+      evaluations: [], interview: null, debrief_status: null, email: d.email, phone: d.phone || null, message: d.message || null,
       facts: [], cv_filename: d.cv_filename || null, cv_text: d.cv_text || d.message || null, cv_link: null,
       debrief: null, has_answers: !!d.raw, answers: [], cand_token: uid("c"), raw: d.raw, fxi: d.fxi || null, order: r.apps.length, sent: [],
+      seen: !!d.manual, manual: !!d.manual, noteList: [], before_rejection: null, rejection_due_at: null, rejection_sent_at: null,
     };
     r.apps.push(a);
-    log(r, "application.received", { source: a.source, has_cv: a.has_cv }, "candidate", a.name);
-    const [subj, body] = fx.texts.acknowledgment;
-    mail(r, a, "acknowledgment", subj, body.replaceAll("{prénom}", first(a)).replaceAll("{lien_donnees}", `${BASE}/candidat/${a.cand_token}`)
-      .replaceAll("{lien_notice}", `${BASE}/confidentialite/${company.slug}`));
+    log(r, d.manual ? "application.added" : "application.received", { source: a.source, has_cv: a.has_cv }, d.manual ? "user" : "candidate", a.name);
+    if (d.note?.trim()) addNote(r, a, d.note.trim());
+    if (d.manual) {
+      if (a.email && d.ack !== false) {
+        const [subj, body] = fx.texts.acknowledgment_received;
+        const hasQ = r.profile.criteria.length > 0 || (r.profile.questions || []).length > 0;
+        const how: Record<string, string> = { email: " par e-mail", linkedin: " par LinkedIn", telephone: " par téléphone" };
+        let b = body.replaceAll("{prénom}", first(a)).replaceAll("{lien_donnees}", `${BASE}/candidat/${a.cand_token}`)
+          .replaceAll("{lien_notice}", `${BASE}/confidentialite/${company.slug}`).replaceAll(" {canal}", how[a.source] || "")
+          .replaceAll("{lien_questions}", `${BASE}/offres/${r.token}?src=${a.source}`);
+        if (!hasQ) b = b.replace(/\n\nPour compléter votre candidature[^\n]*/, "");
+        mail(r, a, "acknowledgment", subj, b);
+      }
+    } else {
+      const [subj, body] = fx.texts.acknowledgment;
+      mail(r, a, "acknowledgment", subj, body.replaceAll("{prénom}", first(a)).replaceAll("{lien_donnees}", `${BASE}/candidat/${a.cand_token}`)
+        .replaceAll("{lien_notice}", `${BASE}/confidentialite/${company.slug}`));
+    }
     afterNew(r, a);
     return a;
+  };
+  const addNote = (r: Rec, a: DApp, text: string) => {
+    a.noteList.push({ id: uid("n"), text: text.slice(0, 2000), author: user.name, author_id: user.id, created_at: now() });
+    log(r, "note.added", {}, "user", a.name);
+  };
+  const awaitingAnswers = (r: Rec, a: DApp) => (r.profile.criteria.length > 0 || (r.profile.questions || []).length > 0) && !a.raw && (!!a.manual || a.source === "email");
+  const proposedIds = (r: Rec): string[] => pending(r, "shortlist")?.payload.application_ids || [];
+  const stageOf = (r: Rec, a: DApp): PipelineStage | null => {
+    const st = a.status;
+    if (st === "withdrawn") return null;
+    if (proposedIds(r).includes(a.id) && ["received", "screened"].includes(st)) return "preselectionne";
+    if (st === "hired") return "embauche";
+    if (st === "rejected" || st === "not_shortlisted") return "refuse";
+    if (st === "booked" || st === "interviewed") return "entretien";
+    if (st === "shortlisted" || st === "invited") return "preselectionne";
+    return a.seen ? "a_evaluer" : "recu";
+  };
+  /** Démo : les remerciements programmés partent à l'échéance (vérifiée à chaque appel). */
+  const tick = () => {
+    for (const r of recs) for (const a of r.apps) {
+      if (a.status === "rejected" && a.rejection_due_at && !a.rejection_sent_at && Date.parse(a.rejection_due_at) <= t()) deliverRejection(r, a, a.subject_tpl!, a.body_tpl!);
+    }
+  };
+  const deliverRejection = (r: Rec, a: DApp, subject: string, body: string) => {
+    mail(r, a, "closing:rejected", render(r, subject, a), render(r, body, a));
+    r.ivs.filter((iv) => iv.application_id === a.id && ["invited", "booked"].includes(iv.status)).forEach((iv) => { release(r, iv); iv.status = "cancelled"; });
+    if (!a.rejection_due_at) log(r, "application.rejected", { group_suggested: a.group }, "user", a.name);
+    a.status = "rejected"; a.shortlisted = false; a.rejection_sent_at = now(); a.rejection_due_at = null; a.before_rejection = null;
   };
   const afterNew = (r: Rec, a: DApp) => {
     if (r.state === "collecting") {
@@ -587,7 +669,8 @@ export function createDemoApi(): Api {
       const p = pending(r, "start_screening");
       if (n >= 5 && !p) propose(r, "start_screening", 2, `${n} candidatures reçues`, fx.start_screening.summary, { count: n });
       else if (p) { p.title = `${n} candidatures reçues`; p.payload = { count: n }; }
-    } else if (["shortlist_review", "scheduling", "interviewing"].includes(r.state)) screenApp(r, a);
+    }
+    if (["collecting", "shortlist_review", "scheduling", "interviewing"].includes(r.state)) screenApp(r, a); // synthèse dès l'arrivée
   };
   const screenApp = (r: Rec, a: DApp) => {
     a.screened = true;
@@ -597,7 +680,7 @@ export function createDemoApi(): Api {
       a.group = a.fxi.group;
     } else {
       a.evaluations = r.profile.criteria.map((c) => declaredEval(c, a.raw));
-      a.group = !a.raw && !a.cv_text ? "unreadable" : computeGroup(a.evaluations);
+      a.group = !a.raw && !isReadable(a.cv_text) ? "unreadable" : computeGroup(a.evaluations);
     }
     log(r, "screening.masked", { categories: { identite: 2, contact: 1 } }, "system", a.name);
     for (const e of a.evaluations) log(r, "screening.criterion_evaluated", { criterion_id: e.criterion_id, status: e.status, evidence: e.evidence }, "system", a.name);
@@ -618,7 +701,7 @@ export function createDemoApi(): Api {
     const m = c("meets");
     let summary = `${m} candidat${m > 1 ? "s" : ""} rempli${m > 1 ? "ssent" : "t"} vos critères indispensables, ${c("partial")} en partie.`;
     summary += proposed.length ? ` ${proposed.length} ${proposed.length > 1 ? "sont pré-cochés" : "est pré-coché"} : validez ou ajustez.` : " Choisissez qui rencontrer.";
-    propose(r, "shortlist", 2, "Sélection à valider", summary, { application_ids: proposed });
+    propose(r, "shortlist", 2, "Sélection à valider", summary, { application_ids: proposed, suggested: proposed });
   };
 
   /* Entretiens */
@@ -731,6 +814,7 @@ export function createDemoApi(): Api {
   const withdrawOffer = (r: Rec) => {
     const o = offerOf(r);
     if (o) { o.status = "closed"; o.channels = o.channels.map((c) => ({ ...c, status: "closed", at: now() })); }
+    for (const v of Object.values(r.posted)) if (v.status === "posted") v.status = "closed";
   };
 
   const counts = (r: Rec): Counts => {
@@ -752,34 +836,55 @@ export function createDemoApi(): Api {
     return { id: r.id, title: r.title, state: r.state, state_label: label,
       step, page: PAGES[step - 1], created_at: r.created_at, published_at: r.published_at, closed_at: r.closed_at,
       applications: r.apps.filter((a) => a.status !== "withdrawn").length, outcome: r.outcome,
-      pending: m ? { id: m.id, kind: m.kind, title: m.title, page: KIND_PAGE[m.kind] } : null };
+      pending: m ? { id: m.id, kind: m.kind, title: m.title, page: KIND_PAGE[m.kind] } : null,
+      new_applications: ["closed", "abandoned"].includes(r.state) ? 0 : r.apps.filter((a) => !a.seen && ["received", "screened"].includes(a.status)).length };
   };
   const detail = (r: Rec): RecruitmentDetail => {
+    tick();
     const apps = r.apps.filter((a) => a.status !== "withdrawn");
     const groups: Record<string, number> = {};
     const sources: Record<string, number> = {};
-    apps.forEach((a) => { groups[a.group || "unscreened"] = (groups[a.group || "unscreened"] || 0) + 1; sources[a.source] = (sources[a.source] || 0) + 1; });
+    const stages: Partial<Record<PipelineStage, number>> = {};
+    apps.forEach((a) => {
+      groups[a.group || "unscreened"] = (groups[a.group || "unscreened"] || 0) + 1; sources[a.source] = (sources[a.source] || 0) + 1;
+      const st = stageOf(r, a);
+      if (st) stages[st] = (stages[st] || 0) + 1;
+    });
     return clone({
       ...summary(r), steps: STEPS, profile: r.profile,
       pending: r.proposals.filter((p) => p.status === "pending"), history: r.proposals.filter((p) => p.status !== "pending").slice(-30),
       offer: offerOf(r), grid: r.grid, groups, counts: counts(r), busy: [],
       apply_link: r.published_at ? `${BASE}/offres/${r.token}` : null,
-      interview_location: r.location, interview_minutes: r.interview_minutes, free_slots: freeSlots(r).length, sources,
+      interview_location: r.location, interview_minutes: r.interview_minutes, free_slots: freeSlots(r).length, sources, stages,
+      inbound_address: r.published_at ? `offres+${r.token}@wayloop.example` : null, assisted: r.profile.assisted || null,
     }) as RecruitmentDetail;
   };
   const answersView = (r: Rec, raw: Record<string, any> | null) => {
     if (!raw) return [];
     return questionsFor(r.profile).filter((q) => q.id in raw).map((q) => {
-      const c = r.profile.criteria.find((x) => x.id === q.id)!;
+      const c = r.profile.criteria.find((x) => x.id === q.id);
+      if (!c) return { question: q.label, answer: String(raw[q.id]) };
       const [, txt] = evaluateDeclared(c, raw[q.id]);
       return { question: q.label, answer: q.input === "text" ? String(raw[q.id]) : txt };
     });
   };
+  const timelineOf = (r: Rec, a: DApp): TimelineItem[] => {
+    const since = plan === "free" ? t() - fx.history_days_free * 86_400_000 : 0;
+    const ev = r.audit.filter((e) => e.subject === a.name && TIMELINE[e.action] && Date.parse(e.at) >= since).map((e) => ({
+      at: e.at, kind: "event" as const, by: e.actor_type,
+      label: e.action === "application.rejected" && e.details.scheduled ? "Classée « Refusé » (remerciement programmé)"
+        : TIMELINE[e.action] + (["application.received", "application.added"].includes(e.action) && e.details.source ? ` (${SOURCE_LABELS[e.details.source] || e.details.source})` : ""),
+    }));
+    const mails = a.sent.map((m) => ({ at: m.created_at, kind: "email" as const, label: `E-mail : ${m.label}`, by: "system", status: m.status }));
+    return [...ev, ...mails].sort((x, y) => y.at.localeCompare(x.at));
+  };
   const item = (r: Rec, a: DApp): ApplicationDetail => {
-    const { cand_token: _t, raw, fxi: _f, order: _o, sent, ...rest } = a;
-    void _t; void _f; void _o;
+    const { cand_token: _t, raw, fxi: _f, order: _o, sent, noteList, before_rejection: _b, subject_tpl: _s, body_tpl: _bt, ...rest } = a;
+    void _t; void _f; void _o; void _b; void _s; void _bt;
     const iv = r.ivs.filter((x) => x.application_id === a.id).slice(-1)[0];
-    return clone({ ...rest, answers: answersView(r, raw), messages: sent,
+    return clone({ ...rest, answers: answersView(r, raw), messages: sent, notes: noteList, notes_count: noteList.length,
+      stage: stageOf(r, a), awaiting_answers: awaitingAnswers(r, a), no_email: !a.email && !a.anonymized,
+      timeline: timelineOf(r, a), history_limited: plan === "free",
       interview: iv ? { id: iv.id, status: iv.status, start: iv.start, end: iv.end, location: iv.location } : null,
       debrief_status: a.debrief?.status || null });
   };
@@ -794,7 +899,7 @@ export function createDemoApi(): Api {
     if (r.state !== "offer_review") throw err400("L'offre est déjà publiée.");
     const o = offerOf(r)!;
     o.status = "published";
-    o.channels = [{ id: "google", label: "Google pour l'emploi", status: "online", at: now() }];
+    o.channels = [{ id: "google", label: "Google pour l'emploi", status: "online", at: now(), mode: "auto" } as Offer["channels"][number]];
     r.published_at = now();
     const p = pending(r, "offer");
     if (p) close(r, p, "accepted");
@@ -910,6 +1015,49 @@ export function createDemoApi(): Api {
     for (const r of recs) { const a = r.apps.find((x) => x.id === aid || x.cand_token === aid); if (a) return { r, a }; }
     throw new ApiError(404, "Candidature introuvable.");
   };
+  /* Diffusion « à coller » (portage de publication.platform_text) */
+  const MANUAL: { id: string; label: string; url: string; hint: string }[] = fx.manual_channels;
+  const hashtag = (x: string) => {
+    const w = x.normalize("NFD").replace(/\p{M}/gu, "").match(/[A-Za-z0-9]+/g) || [];
+    return w.length ? "#" + w.slice(0, 3).map((y) => y[0].toUpperCase() + y.slice(1)).join("") : "";
+  };
+  const platformText = (r: Rec, o: Offer, platform: string) => {
+    const p = r.profile;
+    const title = p.title || r.title;
+    const link = `${BASE}/offres/${r.token}?src=${platform}`;
+    const city = (p.location || "").replace(/\s*\(?\b\d{5}\b\)?\s*/g, " ").trim().replace(/^[ ,-]+|[ ,-]+$/g, "");
+    const facts = [p.contract, p.location, p.salary?.text].filter(Boolean).join(" · ");
+    const req = p.criteria.filter((c) => c.required).map((c) => c.label);
+    const email = `offres+${r.token}@wayloop.example`;
+    if (platform === "linkedin") {
+      const lines = [`${company.name} recrute : ${title}`, ""];
+      if (facts) lines.push(facts, "");
+      if (p.summary) lines.push(p.summary, "");
+      if (p.missions.length) lines.push("Au programme :", ...p.missions.slice(0, 4).map((m) => `• ${m}`), "");
+      if (req.length) lines.push("Indispensable : " + req.join(", "), "");
+      lines.push(`Pour postuler (quelques minutes) : ${link}`, "Réponse assurée à chaque candidature.", "");
+      const short = title.replace(/\(.*?\)/g, "").split(/\s\/\s/)[0];
+      lines.push([...new Set([hashtag("recrutement"), hashtag("emploi"), hashtag(city), hashtag(short)])].filter(Boolean).join(" "));
+      return lines.join("\n").trim();
+    }
+    if (platform === "local") return `${company.name} recrute : ${title}${facts ? ` (${facts})` : ""}. Pour postuler : ${link} ou par e-mail : ${email}.`;
+    let body = o.long.trim();
+    const [head, ...rest] = body.split("\n");
+    if (head.trim() === title) body = rest.join("\n").trim();
+    return `${body}\n\nPour postuler (quelques questions sur le poste, CV en pièce jointe) : ${link}\nVous pouvez aussi envoyer votre CV à ${email}`;
+  };
+  const diffusionOf = (r: Rec): DiffusionChannel[] => {
+    const o = offerOf(r);
+    if (!o) return [];
+    const auto = o.channels.map((c) => ({ ...c, mode: "auto" as const }));
+    return [...auto, ...MANUAL.map((m) => {
+      const st = r.posted[m.id];
+      const status = st?.status || (r.published_at ? "todo" : "draft");
+      return { ...m, mode: "manual" as const, status, at: st?.at || null, link: `${BASE}/offres/${r.token}?src=${m.id}`,
+        outdated: status === "posted" && !!st && o.created_at > st.at, text: platformText(r, o, m.id) };
+    })];
+  };
+
   const exportCache = new Map<string, string>();
   /** Même contenu que l'export du serveur : libellés lisibles, formules neutralisées. */
   const csvFor = (id: string): string | null => {
@@ -940,7 +1088,7 @@ export function createDemoApi(): Api {
     exchange: async () => ({ redirect: "/" }),
     logout: async () => {},
 
-    listRecruitments: async () => recs.map(summary),
+    listRecruitments: async () => { tick(); return recs.map(summary); },
     previewForm: async (form) => {
       const { profile, issues } = buildProfile(form);
       const offer = profile.title.length >= 3 ? offerFromProfile(profile, company.name) : null;
@@ -949,15 +1097,15 @@ export function createDemoApi(): Api {
     createRecruitment: async (form, doPublish) => {
       await wait(400);
       if (plan === "free" && active() >= 1) {
-        throw new ApiError(402, "L'offre Gratuit permet 1 recrutement actif à la fois. Clôturez le recrutement en cours ou passez à Premium pour en ouvrir d'autres.", true);
+        throw new ApiError(402, "L'offre Gratuit permet 1 recrutement actif à la fois. Clôturez le recrutement en cours ou passez à l'offre Pro pour en ouvrir d'autres.", true);
       }
       const { profile, issues } = buildProfile(form);
       if (issues.length) throw err400(issues[0].match ? `Retirez « ${issues[0].match} » : ${issues[0].message}` : issues[0].message, issues);
       const r: Rec = { id: uid("r"), title: profile.title, state: "offer_review", created_at: now(), published_at: null, closed_at: null, shortlisted_at: null,
         profile, proposals: [], offers: [], grid: null, apps: [], slots: [], ivs: [], outcome: null, seconds: 0, location: company.address,
-        interview_minutes: 45, audit: [], token: uid("offre") };
+        interview_minutes: 45, audit: [], token: uid("offre"), posted: {} };
       recs.unshift(r);
-      log(r, "recruitment.created", { criteria: profile.criteria.length, rome_code: profile.rome_code }, "user");
+      log(r, "recruitment.created", { criteria: profile.criteria.length, rome_code: profile.rome_code, assisted: profile.assisted?.engine || null }, "user");
       const sameText = sameAsExample(r) && profile.title === fx.profile.title;
       const o = sameText ? fx.offer : offerFromProfile(profile, company.name);
       saveOffer(r, o.short, o.long, "system");
@@ -1017,13 +1165,17 @@ export function createDemoApi(): Api {
         const todo = targets.filter((a) => !["hired", "rejected", "withdrawn"].includes(a.status));
         if (!todo.length) throw err400("Ces candidatures ont déjà reçu une réponse.");
         const [ds, db] = fx.texts.rejection;
-        for (const a of todo) {
-          mail(r, a, "closing:rejected", render(r, b.subject || ds, a), render(r, b.body || db, a));
-          r.ivs.filter((iv) => iv.application_id === a.id && ["invited", "booked"].includes(iv.status)).forEach((iv) => { release(r, iv); iv.status = "cancelled"; });
-          a.status = "rejected";
-          a.shortlisted = false;
-          log(r, "application.rejected", { group_suggested: a.group }, "user", a.name);
+        if (!b.immediate && has("automations") && automations.auto_reject) {
+          const due = new Date(t() + DEMO_REJECT_DELAY_MS).toISOString();
+          for (const a of todo) {
+            Object.assign(a, { before_rejection: a.status, status: "rejected", shortlisted: false, rejection_due_at: due, rejection_sent_at: null,
+              subject_tpl: b.subject || ds, body_tpl: b.body || db });
+            log(r, "application.rejected", { group_suggested: a.group, scheduled: true }, "user", a.name);
+          }
+          maybeDecision(r);
+          return { done: todo.length, scheduled: todo.length, due_at: due };
         }
+        for (const a of todo) deliverRejection(r, a, b.subject || ds, b.body || db);
         maybeDecision(r);
         return { done: todo.length };
       }
@@ -1045,6 +1197,110 @@ export function createDemoApi(): Api {
       return { done: added.length, invited, to_schedule: toSchedule };
     },
     mailTemplates: async () => clone(fx.mail_templates),
+    draft: async (brief) => {
+      await wait(500);
+      const text = brief.replace(/\s+/g, " ").trim();
+      if (text.length < 4) throw err400("Décrivez le poste en une phrase : intitulé, expérience, lieu, salaire…");
+      const { form, notes } = parseBrief(text);
+      form.assisted = { engine: "regles", model: null };
+      const { issues } = buildProfile(form);
+      return { form, engine: "regles", model: null, notes, issues: issues.filter((i) => i.field !== "salary") };
+    },
+    diffusion: async (id) => diffusionOf(get(id)),
+    markPosted: async (id, channel, posted) => {
+      const r = get(id);
+      if (!MANUAL.some((m) => m.id === channel)) throw new ApiError(404, "Site inconnu.");
+      if (!r.published_at) throw err400("Publiez d'abord l'offre : son lien de candidature figure dans le texte à coller.");
+      const closed = offerOf(r)?.status === "closed";
+      r.posted[channel] = { status: closed ? (posted ? "closed" : "removed") : posted ? "posted" : "todo", at: now() };
+      log(r, "diffusion.marked", { channel, posted }, "user");
+      return diffusionOf(r);
+    },
+    addCandidate: async (id, fd) => {
+      await wait(300);
+      const r = get(id);
+      if (!isOpen(r)) throw err400("Publiez d'abord l'offre : les candidatures s'ajoutent à un recrutement en cours.");
+      const firstName = String(fd.get("first_name") || "").trim();
+      const lastName = String(fd.get("last_name") || "").trim();
+      if (!firstName || !lastName) throw err400("Indiquez le prénom et le nom.");
+      const email = String(fd.get("email") || "").trim().toLowerCase() || null;
+      if (email && r.apps.some((a) => a.email === email && a.status !== "withdrawn")) throw new ApiError(409, "Cette personne a déjà une candidature pour ce poste.");
+      const cv = fd.get("cv") as File | null;
+      const cvText = cv && cv.size && (cv.type.startsWith("text") || cv.name.endsWith(".txt")) ? await cv.text() : null;
+      const a = receive(r, { name: `${firstName} ${lastName}`, email, phone: String(fd.get("phone") || "") || null, source: String(fd.get("source") || "autre"),
+        message: String(fd.get("message") || "") || null, cv_filename: cv?.size ? cv.name : null, cv_text: cvText, raw: null, manual: true,
+        ack: String(fd.get("send_ack")) !== "false", note: String(fd.get("note") || "") || null });
+      return item(r, a);
+    },
+    pipelineMove: async (id, aid, to) => {
+      await wait(200);
+      const r = get(id);
+      const a = r.apps.find((x) => x.id === aid);
+      if (!a) throw new ApiError(404, "Candidature introuvable.");
+      const cur = stageOf(r, a);
+      if (to === "preselectionne") {
+        if (cur === "preselectionne") return { message: "Déjà présélectionné(e).", application: item(r, a) };
+        if (!["recu", "a_evaluer", "refuse"].includes(cur || "") || a.status === "rejected") throw err400("Cette candidature a déjà reçu une réponse : elle ne peut plus être présélectionnée.");
+        a.seen = true;
+        if (["collecting", "shortlist_review"].includes(r.state)) {
+          let p = pending(r, "shortlist");
+          if (!p) {
+            const sp = pending(r, "start_screening");
+            if (sp) close(r, sp, "accepted");
+            await runScreening(r);
+            p = pending(r, "shortlist");
+          }
+          if (p && !p.payload.application_ids.includes(a.id)) p.payload = { ...p.payload, application_ids: [...p.payload.application_ids, a.id] };
+          return { message: "Ajouté(e) à la sélection : validez-la pour inviter les candidats.", application: item(r, a) };
+        }
+        if (["scheduling", "interviewing"].includes(r.state)) {
+          await api.bulk(r.id, { application_ids: [a.id], action: "shortlist" });
+          return { message: "Ajouté(e) aux entretiens.", application: item(r, a) };
+        }
+        throw err400("Ce recrutement n'accepte plus de présélection.");
+      }
+      if (cur === "refuse" && a.rejection_due_at && !a.rejection_sent_at) {
+        await api.undoRejection(a.id);
+        return { message: "Refus annulé : aucun message n'est parti.", application: item(r, a) };
+      }
+      if (cur === "preselectionne" && r.state === "shortlist_review") {
+        const p = pending(r, "shortlist");
+        if (p && p.payload.application_ids.includes(a.id)) {
+          p.payload = { ...p.payload, application_ids: p.payload.application_ids.filter((x: string) => x !== a.id) };
+          return { message: "Retiré(e) de la sélection à valider.", application: item(r, a) };
+        }
+      }
+      if (cur === "recu" || cur === "a_evaluer") { a.seen = true; return { message: "À évaluer.", application: item(r, a) }; }
+      throw err400("Ce retour n'est plus possible à cette étape : la personne a été prévenue ou invitée. Écrivez-lui depuis sa fiche si besoin.");
+    },
+    addNote: async (aid, text) => { const { r, a } = findApp(aid); if (text.trim().length < 2) throw err400("Écrivez la note."); addNote(r, a, text.trim()); return item(r, a); },
+    deleteNote: async (aid, nid) => { const { r, a } = findApp(aid); a.noteList = a.noteList.filter((n) => n.id !== nid); return item(r, a); },
+    undoRejection: async (aid) => {
+      const { r, a } = findApp(aid);
+      if (a.rejection_sent_at || !a.rejection_due_at) throw new ApiError(409, "La réponse est déjà partie : ce refus ne peut plus être annulé.");
+      a.status = a.before_rejection || (a.screened ? "screened" : "received");
+      a.shortlisted = ["shortlisted", "invited", "booked", "interviewed"].includes(a.status);
+      a.rejection_due_at = null; a.before_rejection = null;
+      log(r, "application.rejection_cancelled", { back_to: a.status }, "user", a.name);
+      return item(r, a);
+    },
+    automations: async (): Promise<Automations> => ({ ...automations, available: has("automations"), delay_minutes: 60 }),
+    saveAutomations: async (patch) => {
+      const paid = ["auto_reject", "relance", "weekly_recap"] as const;
+      if (paid.some((k) => patch[k] && !automations[k]) && !has("automations")) requireFeature("automations");
+      Object.assign(automations, Object.fromEntries(Object.entries(patch).filter(([k]) => k in automations)));
+      return { ...automations, available: has("automations"), delay_minutes: 60 };
+    },
+    team: async () => clone([{ id: user.id, name: user.name, email: user.email, role: "owner", me: true, created_at: now() }, ...team]),
+    inviteMember: async (name, email) => {
+      requireFeature("team");
+      if (!email.includes("@")) throw err400("Adresse e-mail invalide.");
+      if (team.some((m) => m.email === email.toLowerCase())) throw new ApiError(409, "Cette adresse a déjà un compte WayLoop.");
+      team.push({ id: uid("u"), name, email: email.toLowerCase(), role: "member", me: false, created_at: now() });
+      return api.team();
+    },
+    removeMember: async (uid_) => { const i = team.findIndex((m) => m.id === uid_); if (i >= 0) team.splice(i, 1); return api.team(); },
+    pricing: async () => clone(fx.pricing),
     exportCsv: (id) => csvFor(id),
     exportUrl: (id) => {
       const csv = csvFor(id);
@@ -1087,17 +1343,17 @@ export function createDemoApi(): Api {
     billing: async (): Promise<Billing> => {
       const end = new Date();
       if (interval === "year") end.setFullYear(end.getFullYear() + 1); else end.setMonth(end.getMonth() + 1);
-      return { plan, plan_name: fx.plans[plan].name, status: plan === "premium" ? "active" : null, interval: plan === "premium" ? interval : null,
-        period_end: plan === "premium" ? end.toISOString() : null, features: [...fx.plans[plan].features],
+      return { plan, plan_name: fx.plans[plan].name, status: plan !== "free" ? "active" : null, interval: plan !== "free" ? interval : null,
+        period_end: plan !== "free" ? end.toISOString() : null, features: [...fx.plans[plan].features],
         usage: { active_recruitments: active(), limit: fx.plans[plan].limit }, billing_mode: "demo", prices: clone(fx.prices),
-        trial_days: 14, has_customer: false, catalog: clone(fx.features) };
+        trial_days: 14, has_customer: false, catalog: clone(fx.features), plans: clone(fx.billing_plans), history_days_free: fx.history_days_free };
     },
-    checkout: async (iv) => { await wait(300); plan = "premium"; interval = iv; recs.forEach((r) => log(r, "billing.plan_changed", { plan }, "user")); return { url: "/abonnement?statut=ok" }; },
+    checkout: async (iv, p = "premium") => { await wait(300); plan = p; interval = iv; recs.forEach((r) => log(r, "billing.plan_changed", { plan }, "user")); return { url: "/abonnement?statut=ok" }; },
     portal: async () => { throw new ApiError(400, "Pas de portail de paiement dans la démo."); },
-    cancelDemo: async () => { plan = "free"; },
+    cancelDemo: async () => { plan = "free"; team.length = 0; },
 
-    listApplications: async (id) => { const r = get(id); return r.apps.filter((a) => a.status !== "withdrawn").map((a) => item(r, a)); },
-    getApplication: async (aid) => { const { r, a } = findApp(aid); return item(r, a); },
+    listApplications: async (id) => { tick(); const r = get(id); return r.apps.filter((a) => a.status !== "withdrawn").map((a) => item(r, a)); },
+    getApplication: async (aid) => { tick(); const { r, a } = findApp(aid); a.seen = true; return item(r, a); },
     saveGrid: async (id, questions) => {
       const r = get(id);
       if (r.apps.some((a) => a.debrief)) throw new ApiError(409, "Des entretiens sont déjà notés avec ces questions : gardez les mêmes pour tous.");
@@ -1185,7 +1441,10 @@ export function createDemoApi(): Api {
     },
     decide: async (id, appId) => { await wait(); const r = get(id); decide(r, appId); return detail(r); },
 
-    audit: async (id) => clone(get(id).audit),
+    audit: async (id) => {
+      const since = plan === "free" ? t() - fx.history_days_free * 86_400_000 : 0;
+      return clone(get(id).audit.filter((e) => Date.parse(e.at) >= since));
+    },
     metrics: async () => {
       const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const k = Math.floor(s.length / 2); return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
       const per = recs.map((r) => {
@@ -1234,12 +1493,22 @@ export function createDemoApi(): Api {
       if (!isOpen(r)) throw new ApiError(410, "Cette offre n'est plus ouverte aux candidatures.");
       if (String(form.get("website") || "")) return;
       const email = String(form.get("email") || "").trim().toLowerCase();
-      if (r.apps.some((a) => a.email === email && a.status !== "withdrawn")) throw new ApiError(409, "Vous avez déjà postulé à cette offre avec cette adresse e-mail.");
       let raw: Record<string, any> = {};
       try { raw = JSON.parse(String(form.get("answers") || "{}")); } catch { raw = {}; }
-      const answers = cleanAnswers(r.profile, raw);
       const cv = form.get("cv") as File | null;
       const message = String(form.get("message") || "");
+      const existing = r.apps.find((a) => a.email === email && a.status !== "withdrawn");
+      if (existing && awaitingAnswers(r, existing)) {
+        // Candidature reçue par e-mail ou ajoutée à la main : le candidat répond aux questions du poste.
+        existing.raw = cleanAnswers(r.profile, raw);
+        existing.has_answers = true;
+        if (message.trim()) existing.message = [existing.message, message.trim()].filter(Boolean).join("\n\n");
+        log(r, "application.completed", { has_cv: !!cv?.size }, "candidate", existing.name);
+        if (["received", "screened"].includes(existing.status)) screenApp(r, existing);
+        return;
+      }
+      if (existing) throw new ApiError(409, "Vous avez déjà postulé à cette offre avec cette adresse e-mail.");
+      const answers = cleanAnswers(r.profile, raw);
       if (!cv?.size && message.trim().length <= 30) throw err400("Joignez un CV, ou présentez votre parcours dans le message.");
       const cvText = cv && cv.size && (cv.type.startsWith("text") || cv.name.endsWith(".txt")) ? await cv.text() : null;
       receive(r, { name: `${form.get("first_name")} ${form.get("last_name")}`.trim(), email, source: String(form.get("src") || "lien"),
