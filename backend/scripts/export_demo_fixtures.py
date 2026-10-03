@@ -35,7 +35,8 @@ from app.modules.interview import latest_grid  # noqa: E402
 from app.modules.mailing import TEMPLATES, rejection_template  # noqa: E402
 from app.modules.question_bank import MISE_EN_SITUATION, QUESTION_BANK  # noqa: E402
 from app.seed import CANDIDATES, FIXTURES, FORM  # noqa: E402
-from app.services import plans, referentiels  # noqa: E402
+from app.modules import assistant  # noqa: E402
+from app.services import plans, publication, referentiels  # noqa: E402
 from app.views import application_view  # noqa: E402
 
 ROME_FILTERS = referentiels.SAVOIR_FILTERS["logiciels"] | referentiels.SAVOIR_FILTERS["habilitations"]
@@ -101,6 +102,9 @@ def main(out_dir: str) -> None:
         "closing_rejected": comms.closing_rejected(company, rec, "{prénom}", interviewed=False, pool_consent=False,
                                                    data_link="{lien}"),
         "privacy": comms.privacy_notice(company),
+        "acknowledgment_received": comms.acknowledgment_received(company, rec, "{prénom}", "{lien_donnees}", "{lien_notice}",
+                                                                 "{lien_questions}", "{canal}"),
+        "complete_reminder": comms.complete_reminder(company, rec, "{prénom}", "{lien_questions}", "{lien_donnees}"),
     }
     fx["mail_templates"] = [{"id": k, "label": t["label"], "subject": t["subject"], "body": t["body"]}
                             for k, t in TEMPLATES.items()]
@@ -117,8 +121,30 @@ def main(out_dir: str) -> None:
                    "contracts": referentiels.CONTRACTS}
     fx["plans"] = {k: {"name": p.name, "limit": p.active_recruitments, "features": sorted(p.features)}
                    for k, p in plans.PLANS.items()}
-    fx["prices"] = plans.summary(db, company)["prices"]
+    summary = plans.summary(db, company)
+    fx["prices"] = summary["prices"]
+    fx["billing_plans"] = summary["plans"]
+    fx["pricing"] = plans.prices()
     fx["features"] = plans.FEATURES
+    fx["history_days_free"] = plans.HISTORY_DAYS_FREE
+
+    # --- Assistant de rédaction (règles), diffusion « à coller »
+    fx["assistant"] = {
+        "families": [{"pattern": pat, **fam} for pat, fam in assistant.FAMILIES],
+        "software": assistant.SOFTWARE, "lang_words": assistant.LANG_WORDS, "lang_levels": assistant.LANG_LEVELS,
+        "seniority": assistant.SENIORITY, "abbreviations": assistant.ABBREVIATIONS,
+        "diplomas": assistant.DIPLOMAS, "habilitations": assistant.HABILITATIONS,
+        "contract_words": assistant.CONTRACT_WORDS, "title_cut": assistant.TITLE_CUT,
+        "examples": {b: assistant.parse_brief(b) for b in (
+            "Dev Python junior, 3 ans, Lyon, 2500-3000 €",
+            "Serveur en CDD 6 mois à Annecy, 1 900 € brut, week-ends",
+            "Assistant commercial ADV, 2 ans, Excel, Villeurbanne, 2 100 à 2 400 € par mois",
+            "Électricien bâtiment confirmé, CDI, Nantes, 32-36 k€, habilitation électrique")},
+    }
+    fx["manual_channels"] = publication.MANUAL
+    from app.modules.interview import FORBIDDEN_TOPICS
+
+    fx["question_guardrails"] = FORBIDDEN_TOPICS
 
     out = Path(out_dir)
     (out / "demo-fixtures.json").write_text(json.dumps(fx, ensure_ascii=False, indent=1), encoding="utf-8")
