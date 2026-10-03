@@ -50,11 +50,11 @@ export function Badge({ children, tone = "", dot, wrap, title }: { children: Rea
   return <span className={`badge ${tone} ${wrap ? "wrap" : ""}`} title={title}>{dot && <span className="d" />}{children}</span>;
 }
 
-export function PremiumTag({ label = "Premium" }: { label?: string }) {
+export function PremiumTag({ label = "Pro" }: { label?: string }) {
   return <span className="lock"><Lock size={11} strokeWidth={2.5} />{label}</span>;
 }
 
-/** Bouton qui ouvre la fenêtre Premium au lieu d'agir, si la fonctionnalité est verrouillée. */
+/** Bouton qui ouvre la fenêtre des offres au lieu d'agir, si la fonctionnalité est verrouillée. */
 export function LockedButton({ children, reason, size = "" }: { children: ReactNode; reason: string; size?: "sm" | "lg" | "" }) {
   const upgrade = useUpgrade();
   return (
@@ -323,7 +323,8 @@ export function OfferText({ text, skipTitle, small }: { text: string; skipTitle?
   return (
     <div className={`offer-text ${small ? "small" : ""}`}>
       {blocks.map((b, i) => {
-        const head = !isItem(b[0]) && b.length > 1 && b.slice(1).every(isItem) ? b[0] : null;
+        const shortHead = b[0].length <= 40 && !/[.!?:;,]$/.test(b[0]);
+        const head = !isItem(b[0]) && b.length > 1 && (b.slice(1).every(isItem) || shortHead) ? b[0] : null;
         const rest = head ? b.slice(1) : b;
         return (
           <section key={i}>

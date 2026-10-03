@@ -478,3 +478,64 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 .pick-card input { accent-color: var(--brand); width: 18px; height: 18px; margin: 0; flex: none; }
 .pick-card .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 @media (max-width: 640px) { .wizard-steps li:not(.on) .lbl { display: none; } .wizard-steps li + li::before { width: 12px; } }
+
+/* --- Assistant de rédaction ------------------------------------------------------------------- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 4px 10px; font: 500 12.5px var(--font); cursor: pointer; text-align: left; }
+.chip:hover { background: var(--brand-soft); border-color: transparent; color: var(--brand-soft-ink); }
+.chip:disabled { opacity: .5; cursor: wait; }
+
+/* --- Diffusion : sites où l'on colle le texte ------------------------------------------------- */
+.chan-manual { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+.chan-manual .grow { flex: 1; min-width: 0; }
+.chan-manual.done { background: var(--surface); }
+.chan-manual-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.chan-check { flex: none; align-items: center; gap: 6px; padding-top: 1px; color: var(--ink); }
+.chan-check input { margin: 0; }
+.self-start { align-self: flex-start; }
+.textarea.q-text { min-height: 0; flex: 1; }
+.textarea.chan-text { font-size: 13px; min-height: 160px; }
+
+/* --- Pipeline (Kanban) -------------------------------------------------------------------------- */
+.kanban { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+.kcol { background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--r-lg); display: flex; flex-direction: column; min-height: 220px; transition: background .12s, border-color .12s; }
+.kcol.over { background: var(--brand-soft); border-color: var(--brand); }
+.kcol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 8px; }
+.kcol-head .count { font-size: 12px; background: var(--surface); color: var(--ink-2); padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); }
+.kcol-action { margin: 0 10px 8px; }
+.kcol-body { display: flex; flex-direction: column; gap: 8px; padding: 0 8px 10px; }
+.kempty { font-size: 12px; color: var(--subtle); padding: 10px 6px; text-align: center; border: 1px dashed var(--line-2); border-radius: var(--r); }
+.kcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 10px 10px 12px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; box-shadow: var(--shadow-xs); }
+.kcard:hover { border-color: var(--line-2); box-shadow: var(--shadow-md); }
+.kcard.new { border-left: 3px solid var(--brand); padding-left: 10px; }
+.kcard[draggable="true"] { cursor: grab; }
+.kcard .kname { color: var(--ink); font-weight: 600; font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kcard .kbadges { gap: 4px; }
+.kcard .kbadges .badge { height: 20px; font-size: 11.5px; padding: 0 7px; }
+.kcard .menu-list { min-width: 170px; }
+.kdue { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 8px; background: var(--warn-bg); color: var(--warn); border-radius: var(--r-sm); padding: 4px 8px; margin-top: 2px; }
+@media (max-width: 960px) { .kanban { grid-template-columns: repeat(6, minmax(220px, 82vw)); scroll-snap-type: x mandatory; } .kcol { scroll-snap-align: start; } }
+
+/* --- Fiche candidat : questions, notes, historique ---------------------------------------------- */
+.qa { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.qa dt { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+.qa dd { margin: 4px 0 0; color: var(--ink-2); }
+.notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.notes > li { border-left: 3px solid var(--line-2); padding: 2px 0 2px 10px; }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline > li { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.timeline > li:last-child { border-bottom: 0; }
+.timeline .tl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; transform: translateY(-1px); }
+.timeline > li.email .tl-dot { background: var(--subtle); }
+.timeline .grow { flex: 1; min-width: 0; }
+
+/* --- Offres ---------------------------------------------------------------------------------------- */
+.pricing.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 960px) { .pricing.three { grid-template-columns: 1fr; } }
+.plan { display: flex; flex-direction: column; gap: 14px; }
+.plan.current { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft), var(--shadow-xs); }
+.plan .price { font-size: 30px; }
+.settings-row { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.settings-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.settings-row:first-child { padding-top: 0; }
+.settings-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
