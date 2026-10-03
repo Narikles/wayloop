@@ -1,91 +1,93 @@
-# WayLoop — le recrutement simple pour les TPE et PME
+# WayLoop — recruter sans le chaos, pour les TPE et PME
 
-WayLoop mène un recrutement de bout en bout pour le dirigeant d'une petite entreprise. Il décrit
-son besoin dans un formulaire en quatre étapes (appuyé sur le référentiel des métiers de France
-Travail) ; l'offre est rédigée, conforme d'office, et publiée en un geste ; chaque candidat répond
-aux questions issues des critères ; une synthèse montre, critère par critère, ce qu'il déclare et
-ce que son CV confirme. Le dirigeant sélectionne, invite, note les entretiens, choisit et répond à
-tous. L'outil prépare ; le dirigeant décide.
+WayLoop donne au dirigeant d'une petite entreprise un processus clair, de l'offre au dernier
+candidat :
 
-Aucune IA, dans aucune offre : formulaire, référentiels publics et règles explicites. Tout passe
-par e-mail. Interface en thème clair (sombre au choix dans Paramètres).
+1. **Il décrit le poste en une phrase.** L'assistant (Claude Haiku) rédige la description, les
+   critères clés et trois questions de présélection ; le dirigeant relit et corrige dans le
+   formulaire habituel. Sans clé d'API, un repli par règles remplit le même formulaire.
+2. **Il publie partout, honnêtement.** Google pour l'emploi automatiquement ; LinkedIn, Indeed,
+   France Travail et les relais locaux en un copier-coller, avec un texte adapté à chaque site et
+   un lien de candidature suivi.
+3. **Toutes les candidatures arrivent au même endroit** : formulaire en ligne, adresse e-mail
+   dédiée, candidatures reçues ailleurs (message LinkedIn, appel, CV déposé) ajoutées à la main.
+   La provenance de chaque candidat est affichée.
+4. **Un pipeline simple** : Reçu → À évaluer → Présélectionné → Entretien → Refusé / Embauché, avec
+   CV, réponses aux questions, notes et historique complet sur chaque fiche.
+5. **Les relances se font seules** : remerciement automatique des refusés (annulable pendant une
+   heure), relance des non-répondants, récapitulatif chaque lundi, alerte à chaque candidature.
 
-Le logiciel suit le *Dossier de construction* (octobre 2026) : les numéros de section cités
-renvoient à ce dossier.
+L'IA ne sert qu'à **rédiger les textes de l'employeur**. Elle ne lit, ne note et ne trie aucune
+candidature, et aucune donnée de candidat ne lui est envoyée (voir
+[docs/conformite.md](docs/conformite.md) § 2). Le dirigeant décide de tout.
 
 ## Offres
 
-| | Gratuit | Premium |
-|---|---|---|
-| Prix | 0 € | 49 € HT/mois sans engagement, ou 468 € HT/an (39 € HT/mois), 14 jours d'essai |
-| Recrutements en même temps | 1 | Illimités |
-| Rendez-vous | Invitation par e-mail, le dirigeant fixe la date | En plus : le candidat choisit son créneau en ligne, relance automatique |
-| Export CSV des candidatures | — | ✓ |
-| Tout le reste (offre, publication, synthèse, sélection, e-mails groupés, entretiens, décision, conformité) | ✓ | ✓ |
+| | Gratuit | Pro | Agence |
+|---|---|---|---|
+| Prix | 0 € | **25 € HT/mois**, ou 240 € HT/an (20 €/mois) | **79 € HT/mois**, ou 756 € HT/an (63 €/mois) |
+| Recrutements en même temps | 1 | Illimités | Illimités |
+| Assistant de rédaction, diffusion, pipeline, notes, e-mail dédié, alertes | ✓ | ✓ | ✓ |
+| Remerciement automatique, relances, récapitulatif hebdomadaire | — | ✓ | ✓ |
+| Historique | 30 derniers jours | Complet | Complet |
+| Créneaux d'entretien en ligne, export CSV | — | ✓ | ✓ |
+| Plusieurs utilisateurs, support prioritaire | — | — | ✓ |
 
-Détail, comparaison de marché sourcée et raisons du découpage : [docs/tarifs.md](docs/tarifs.md).
+Les limites sont appliquées côté serveur (HTTP 402). Prix, coûts de l'IA et comparaison de
+marché : [docs/tarifs.md](docs/tarifs.md).
 
 ## Le parcours : une page par étape
 
 | Page | Ce que le dirigeant y fait |
 |---|---|
-| **Offre** | Relit l'offre, la publie, voit où elle est diffusée, retouche le texte |
-| **Candidatures** | Consulte les candidatures, valide la sélection préparée, écrit ou répond en masse |
-| **Entretiens** | Envoie les invitations, fixe les dates (ou laisse les candidats réserver, Premium) |
+| **Offre** | Relit l'offre, la publie, coche les sites où il l'a postée, copie le texte adapté à chacun |
+| **Candidatures** | Pipeline en colonnes (glisser-déposer) ou liste ; ajoute un candidat reçu ailleurs ; valide la sélection |
+| **Entretiens** | Invite, fixe les dates (ou laisse les candidats réserver, Pro) |
 | **Débrief** | Note chaque entretien sur la grille de questions |
-| **Décision** | Compare, choisit, envoie les réponses à tous |
+| **Décision** | Compare, choisit, répond à tous |
 
-Chaque e-mail de notification ouvre directement la bonne page. L'historique du recrutement est
-dans le menu ⋯ ; l'agenda de tous les entretiens a sa propre entrée dans le menu principal.
-
-## Diffusion des offres
-
-À la publication, sans autre action du dirigeant :
-
-- **Google pour l'emploi** : page publique balisée (données structurées `JobPosting`), plan du
-  site, signalement par l'API d'indexation si elle est configurée. C'est le seul canal à la fois
-  gratuit et automatique sans accord préalable ; Google reste seul juge de l'affichage.
-- **Lien à partager** (réseaux, e-mail, affichage), avec suivi de provenance.
-- **Plateformes partenaires** par flux XML, une fois l'accord passé avec chacune
-  (`PUBLICATION_FEEDS`). France Travail, l'Apec, Indeed et LinkedIn demandent une convention ou
-  une intégration à obtenir par l'éditeur ; voir [docs/deploiement.md](docs/deploiement.md) § 6.
-
-À l'embauche ou à l'abandon, l'offre est retirée partout.
+Paramètres : entreprise, automatisations, équipe (Agence), apparence, abonnement.
 
 ## Ce qui est livré
 
-| Module | État | Où |
+| Fonction | État | Où |
 |---|---|---|
-| Offres Gratuit / Premium, limites appliquées côté serveur (HTTP 402), paiement Stripe (Checkout, portail, webhook signé et idempotent) | Fait | `services/plans.py`, `services/billing.py`, `routers/webhooks.py` |
-| Formulaire guidé : référentiel ROME 4.0 embarqué, communes (Géoplateforme), SIREN (API Recherche d'entreprises), offre rédigée par modèle de texte | Fait | `modules/form.py`, `modules/templates.py`, `services/referentiels.py` |
-| Offre conforme d'office : « (H/F) », reformulations sûres ; seule une mention impossible à corriger est signalée, sous son champ, avec « Retirer » | Fait | `modules/compliance.py` |
-| Publication automatique : Google pour l'emploi, plan du site, API d'indexation, flux partenaires, retrait à la clôture | Fait ; partenaires à activer après accord | `services/publication.py` |
-| Questions aux candidats, synthèse par règles (déclaré / confirmé par le CV / écart à vérifier), masquage, aucun rejet automatique | Fait | `modules/screening.py`, `modules/cv_rules.py`, `modules/masking.py` |
-| Sélection en masse : e-mail groupé avec modèles, refus courtois, ajout aux entretiens, export CSV (Premium) | Fait | `modules/mailing.py` |
-| Parcours en 5 pages, machine à états, propositions validées d'un geste (§3, §4, §6.1) | Fait | `orchestrator.py`, `views.py` |
-| Rendez-vous : date fixée par le dirigeant ou créneaux en ligne (Premium), invitation d'agenda `.ics`, relance, rappel la veille, annulation | Fait | `orchestrator.py`, `worker.py` |
-| Synchronisation Google / Microsoft Agenda | Non fait (fichier `.ics` joint à la place) | — |
-| Grille d'entretien par banque de questions, garde-fous, version imprimable, notes, comparatif | Fait | `modules/question_bank.py`, `modules/interview.py` |
-| E-mails aux candidats : accusé avec information RGPD, invitation, rappel, réponse à tous | Fait | `modules/communication.py` |
-| Journal d'audit en ajout seul, chaîné, sans donnée personnelle | Fait (+ déclencheur PostgreSQL) | `audit.py`, `migrations/` |
-| Échéancier de purge (24 mois après le dernier contact), retrait par le candidat, page « mes données » | Fait | `services/purge.py` |
-| Indicateurs de pilotage (§9), suivi à 3 et 6 mois | Fait | `services/metrics.py` |
-| Tests de régression et de biais par CV jumeaux | Fait | `scripts/regression.py`, `scripts/bias_check.py`, `tests/` |
-| Espace prescripteur, multisite (phase 3) | Non fait | — |
+| Assistant de rédaction : une phrase → description, critères, 3 questions ; appel forcé d'outil, limite quotidienne, coût suivi, repli par règles ; le salaire, le lieu et le contrat saisis par le dirigeant priment toujours | Fait | `modules/assistant.py` |
+| Offre conforme d'office (« (H/F) », reformulations sûres, mentions interdites bloquées) et garde-fous sur les questions de présélection | Fait | `modules/compliance.py`, `modules/form.py` |
+| Diffusion : Google pour l'emploi (JobPosting, plan du site, API d'indexation), flux XML partenaires après accord, liste de contrôle des sites manuels avec texte adapté et lien suivi | Fait | `services/publication.py` |
+| Candidatures centralisées : formulaire, e-mail entrant (IMAP, `offres+<jeton>@…`), ajout manuel avec accusé de réception RGPD | Fait | `services/inbound.py`, `orchestrator.add_candidate` |
+| Pipeline Kanban à 6 colonnes, notes d'équipe, historique par candidat | Fait | `orchestrator.pipeline_move`, `views.py`, `pages/recruitment/pipeline.tsx` |
+| Automatisations : remerciement programmé et annulable, relance unique, récapitulatif du lundi, alerte de candidature | Fait | `services/automations.py`, `scheduler.py`, `worker.py` |
+| Offres Gratuit / Pro / Agence, paiement Stripe (Checkout, portail, webhook signé) | Fait | `services/plans.py`, `services/billing.py` |
+| Équipe : invitation par e-mail, retrait (Agence) | Fait | `routers/api.py` (`/api/team`) |
+| Synthèse des réponses par règles (critère par critère, jamais de rejet automatique), entretiens, débrief, décision | Fait | `modules/screening.py`, `modules/interview.py` |
+| Journal d'audit chaîné, purge à 24 mois, page « mes données » | Fait | `audit.py`, `services/purge.py` |
+| Messages LinkedIn reçus automatiquement | Impossible sans partenariat LinkedIn : ajout manuel + lien suivi | — |
+| Synchronisation Google / Microsoft Agenda | Non fait (invitation `.ics` jointe) | — |
+
+Correspondance détaillée avec la feuille de route : [docs/roadmap.md](docs/roadmap.md).
 
 ## Démarrer en 3 commandes (Docker)
 
-Prérequis : Docker et Docker Compose.
-
 ```bash
 python3 scripts/init_env.py          # crée .env avec des clés aléatoires
-docker compose up -d --build         # base PostgreSQL, application, tâches de fond, boîte mail de test
-open http://localhost:8000           # créez votre compte ; le lien de connexion s'affiche à l'écran (mode démo)
+docker compose up -d --build         # PostgreSQL, application, tâches de fond, boîte mail de test
+open http://localhost:8000           # créez votre compte ; le lien de connexion s'affiche (mode démo)
 ```
 
-Les e-mails envoyés (au dirigeant comme aux candidats) arrivent dans la boîte de test
-<http://localhost:8025>. En mode démo (`BILLING_MODE=demo`), « Passer à Premium » active l'offre
-sans paiement ; pour encaisser, voir [docs/deploiement.md](docs/deploiement.md) § 10.
+Les e-mails arrivent dans la boîte de test <http://localhost:8025>. En mode démo
+(`BILLING_MODE=demo`), « Passer à Pro » active l'offre sans paiement.
+
+Pour activer l'assistant IA, ajoutez dans `.env` (ou dans les variables du service Render) :
+
+```
+ANTHROPIC_API_KEY=sk-ant-…
+# AI_MODEL=claude-haiku-4-5        (par défaut)
+```
+
+Sans clé, l'assistant fonctionne en mode « règles » : il remplit le formulaire à partir des mots
+reconnus dans la phrase (métier, années, salaire, ville, logiciels, permis…), sans inventer le
+reste. Réception des CV par e-mail : [docs/deploiement.md](docs/deploiement.md) § 8.
 
 ## Développer
 
@@ -94,9 +96,9 @@ sans paiement ; pour encaisser, voir [docs/deploiement.md](docs/deploiement.md) 
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-DEMO_MODE=true python -m app.seed        # entreprise (offre Gratuit) et recrutement fictifs ; --full : jusqu'à la sélection ; --premium
+DEMO_MODE=true python -m app.seed        # entreprise et recrutement fictifs ; --full, --premium
 DEMO_MODE=true uvicorn app.main:app --reload
-pytest                                   # 40 tests ; TEST_DATABASE_URL=postgresql+psycopg://… pour PostgreSQL
+pytest                                   # 54 tests ; TEST_DATABASE_URL=postgresql+psycopg://… pour PostgreSQL
 
 # Interface (Node 22)
 cd frontend
@@ -107,62 +109,51 @@ npm run build:demo                       # démo hors ligne en un seul fichier (
 ```
 
 En développement, la base SQLite est créée automatiquement. En production (PostgreSQL), le schéma
-est géré par Alembic (`alembic upgrade head`, lancé automatiquement par le conteneur).
+est géré par Alembic (`alembic upgrade head`, lancé par le conteneur). Le planificateur intégré
+(refus programmés, relances, récapitulatif, e-mails entrants) tourne dans le processus web quand
+`JOBS_MODE=inline` ; avec `JOBS_MODE=worker`, c'est le worker qui s'en charge.
 
 ## Organisation du dépôt
 
 ```
 backend/
   app/
-    orchestrator.py     machine à états, propositions, enchaînement des étapes (le cœur)
-    views.py            ce que chaque page affiche (étape, compteurs, libellés)
-    modules/            formulaire, offre et conformité, lecture des CV et synthèse, masquage,
-                        grille d'entretien, e-mails aux candidats, e-mails groupés
-    services/           publication, stockage chiffré, purge, indicateurs, abonnement, référentiels
-    channels/           envoi des e-mails (SMTP)
-    routers/            API dirigeant, pages publiques, webhook Stripe, authentification
-    audit.py            journal en ajout seul
-    worker.py           synthèse en tâche de fond, rappels, signalements Google, suivi, purge
-  migrations/           Alembic (dont le déclencheur qui rend le journal non modifiable)
+    orchestrator.py     machine à états, propositions, pipeline, candidatures ajoutées, notes
+    views.py            ce que chaque page affiche (colonne, compteurs, historique)
+    modules/            assistant de rédaction, formulaire, offre et conformité, lecture des CV,
+                        synthèse, masquage, grille d'entretien, e-mails aux candidats
+    services/           publication, automatisations, e-mail entrant, offres et paiement,
+                        stockage chiffré, purge, indicateurs, référentiels
+    scheduler.py        planificateur intégré (un seul processus)
+    worker.py           tâches différées et périodiques
+    routers/            API, pages publiques, webhook Stripe, authentification
+  migrations/           Alembic (0004 : notes, e-mails entrants, automatisations)
   scripts/              régression, biais, export des données de la démo
-  tests/                parcours complet, offre Gratuit, entretiens, conformité, publication,
-                        masquage, purge, biais, journal
-frontend/               React + TypeScript ; src/api/demo.ts = démo hors ligne (rejoue les sorties
-                        du back-end, exportées par scripts/export_demo_fixtures.py)
-docs/                   architecture, conformité, déploiement, offres et prix
+  tests/                parcours complet, nouvel angle (test_pivot.py), offres, conformité…
+frontend/               React + TypeScript ; src/api/demo.ts = démo hors ligne
+docs/                   architecture, conformité, déploiement, offres et prix, feuille de route
 ```
 
 ## Avant la mise en production
 
-1. **Phase 0 d'abord.** Le dossier prévoit d'accompagner 5 à 10 recrutements réels avant d'investir
-   dans le produit. L'écran « Indicateurs » mesure ce que cette phase doit établir (temps du
-   dirigeant, candidatures par offre et par provenance, sélection validée telle quelle, présence
-   aux entretiens, issue).
-2. **Revue juridique** (RGPD, Code du travail, qualification au regard de l'AI Act) :
-   [docs/conformite.md](docs/conformite.md).
-3. **Déploiement** : HTTPS, sauvegardes, clés, e-mails signés (SPF, DKIM, DMARC) :
-   [docs/deploiement.md](docs/deploiement.md).
-4. **Diffusion** : déclarer le domaine dans Google Search Console, soumettre le plan du site,
-   configurer l'API d'indexation ; négocier les accords avec les plateformes visées.
-5. **Qualité des règles** : `python scripts/regression.py`, `python scripts/regression.py --cv-seul`
-   et `python scripts/bias_check.py` doivent passer sans écart (aussi lancés par l'intégration
-   continue).
-6. **Tarifs** : confirmer les prix concurrents cités dans [docs/tarifs.md](docs/tarifs.md) avant
-   toute communication comparative ; créer les prix dans Stripe.
+1. **Revue juridique** : qualification de l'assistant au regard de l'AI Act (art. 6(3), 50(2)),
+   contrat de sous-traitance, AIPD — [docs/conformite.md](docs/conformite.md).
+2. **Déploiement** : HTTPS, PostgreSQL, sauvegardes, e-mails signés (SPF, DKIM, DMARC), boîte de
+   réception dédiée — [docs/deploiement.md](docs/deploiement.md).
+3. **Diffusion** : déclarer le domaine dans Google Search Console ; les textes pour LinkedIn,
+   Indeed et France Travail sont prêts à coller, une publication automatique demanderait un
+   accord avec chaque plateforme.
+4. **Tarifs** : créer les quatre prix (Pro et Agence, mensuel et annuel) dans Stripe.
 
 ## Limites connues
 
-- La lecture des CV par règles reconnaît les cas simples (durées d'expérience, permis, langues,
-  diplômes, logiciels). Une réponse du candidat non retrouvée dans son CV est marquée « à vérifier
-  en entretien », jamais écartée.
-- Pas d'OCR : un CV scanné est classé « à lire vous-même ».
-- Le masquage ne neutralise pas le genre grammatical (« assistante ») ; les CV jumeaux mesurent
-  l'effet résiduel.
-- La diffusion automatique gratuite se limite à Google pour l'emploi tant qu'aucun accord
-  partenaire n'est signé, et Google ne garantit pas l'affichage.
-- La limitation de débit des pages publiques est en mémoire (une seule instance) ; derrière un
-  proxy, ajoutez une limite en amont.
-- Un seul rôle utilisateur est exposé dans l'interface (le dirigeant).
-- La démo hors ligne embarque le ROME mais pas la Géoplateforme ni l'annuaire des entreprises
-  (listes réduites) ; elle ne publie rien réellement. Pour des critères différents de l'exemple,
-  elle évalue les réponses déclarées sans relire les CV.
+- La diffusion automatique se limite à Google pour l'emploi tant qu'aucun accord partenaire n'est
+  signé ; Google ne garantit pas l'affichage.
+- Les messages LinkedIn ne peuvent pas être relevés automatiquement (API de messagerie réservée
+  aux partenaires) : on les ajoute à la main, ou le candidat passe par le lien suivi.
+- L'e-mail entrant demande une boîte IMAP acceptant les adresses `offres+…@` (sous-adressage).
+- La lecture des CV par règles reconnaît les cas simples ; un CV scanné est « à lire vous-même ».
+- Sur l'offre gratuite de Render, le service s'endort : les tâches programmées attendent son
+  réveil, et la base est effacée à chaque redémarrage.
+- La démo hors ligne simule les envois et l'assistant (exemples rejoués, phrase libre analysée par
+  règles) ; elle ne publie rien réellement.

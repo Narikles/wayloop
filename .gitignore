@@ -1,0 +1,11 @@
+.env
+node_modules/
+frontend/dist/
+frontend/dist-demo/
+backend/data/
+backend/*.db
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+ca-test.crt
