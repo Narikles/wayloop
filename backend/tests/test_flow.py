@@ -146,7 +146,7 @@ def test_full_recruitment_premium(premium, logged, session):
     m = c.get("/api/metrics").json()
     one = next(x for x in m["recruitments"] if x["id"] == rec["id"])
     assert one["applications"] == 7 and one["rescued"] == 1 and one["hired"]
-    assert one["applications_by_source"] == {"google": 4, "lien": 3}
+    assert one["applications_by_source"] == {"google": 2, "linkedin": 2, "lien": 1, "indeed": 1, "france_travail": 1}
     assert m["summary"]["hired"] == 1 and "llm_calls" not in one
     assert c.get("/api/audit/verify").json()["intact"]
     log = c.get(f"/api/recruitments/{rec['id']}/audit").json()

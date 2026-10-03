@@ -24,9 +24,18 @@ def accept(c, rec, kind, body=None):
     return r.json()
 
 
-def test_no_ai_anywhere():
+def test_ai_only_drafts_offers():
+    """L'IA ne sert qu'à rédiger le brouillon de l'offre : aucun module d'IA dans l'évaluation des candidats."""
+    import inspect
+
+    from app.modules import cv_rules, masking, screening
+
     assert importlib.util.find_spec("app.llm") is None
     assert importlib.util.find_spec("app.services.transcription") is None
+    for mod in (screening, cv_rules, masking):
+        src = inspect.getsource(mod)
+        assert "import assistant" not in src and ".assistant" not in src
+        assert "anthropic" not in src.lower() and "httpx" not in src
 
 
 def test_free_flow(logged, session):
@@ -238,7 +247,8 @@ def test_billing_demo_and_stripe_webhook(logged, session, owner, monkeypatch):
     url = c.post("/api/billing/checkout", json={"interval": "year"}).json()["url"]
     assert url.endswith("/abonnement?statut=ok")
     me = c.get("/api/auth/me").json()
-    assert me["plan"]["id"] == "premium" and me["plan"]["features"] == ["export", "scheduling"]
+    assert me["plan"]["id"] == "premium" and me["plan"]["name"] == "Pro"
+    assert me["plan"]["features"] == ["automations", "export", "history", "scheduling"]
     assert me["plan"]["active_recruitments_limit"] is None
     assert c.post("/api/billing/cancel-demo").status_code == 200
     assert c.get("/api/billing").json()["plan"] == "free"
@@ -281,4 +291,4 @@ def test_export_csv_premium(premium, logged, session):
     assert r.status_code == 200
     text = r.content.decode("utf-8-sig")
     assert "Nom;E-mail" in text and "'=HYPERLIEN(1) Test" in text
-    assert ";Lien direct;" in text and ";Nouvelle" in text  # libellés lisibles, pas de codes internes
+    assert ";Lien direct;" in text and ";Reçue" in text  # libellés lisibles, pas de codes internes
