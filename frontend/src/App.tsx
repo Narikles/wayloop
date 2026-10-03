@@ -47,7 +47,11 @@ function TokenExchange() {
 /** Chaque nouvelle page s'ouvre en haut. */
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]); // accolades : scrollTo renvoie une promesse (Chrome 154+)
+  // Accolades obligatoires : scrollTo renvoie une promesse dans les navigateurs récents (Chrome 154+),
+  // et React prendrait toute valeur renvoyée par l'effet pour sa fonction de nettoyage.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   return null;
 }
 
